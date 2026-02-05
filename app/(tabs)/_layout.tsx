@@ -1,35 +1,139 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
-
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { View, StyleSheet } from 'react-native';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import Colors from '../../constants/colors';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginBottom: 4,
+          letterSpacing: 0.3,
+        },
+        tabBarActiveTintColor: Colors.accent,
+        tabBarInactiveTintColor: '#8E8E93',
+        tabBarStyle: {
+          backgroundColor: '#000000',
+          borderTopWidth: 0,
+          height: 82,
+          paddingTop: 8,
+          paddingBottom: 20,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.15,
+          shadowRadius: 12,
+          elevation: 10,
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'Inicio',
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
+              <Feather
+                name="home"
+                size={focused ? 24 : 22}
+                color={focused ? '#000' : '#8E8E93'}
+              />
+            </View>
+          ),
         }}
       />
+
       <Tabs.Screen
-        name="explore"
+        name="booking"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Reservar',
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
+              <MaterialCommunityIcons
+                name={focused ? 'calendar-check' : 'calendar-blank-outline'}
+                size={focused ? 26 : 24}
+                color={focused ? '#000' : '#8E8E93'}
+              />
+            </View>
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="appointments"
+        options={{
+          title: 'Citas',
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
+              <MaterialCommunityIcons
+                name={focused ? 'clock-check' : 'clock-outline'}
+                size={focused ? 26 : 24}
+                color={focused ? '#000' : '#8E8E93'}
+              />
+            </View>
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="products"
+        options={{
+          title: 'Tienda',
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
+              <Feather
+                name="shopping-bag"
+                size={focused ? 24 : 22}
+                color={focused ? '#000' : '#8E8E93'}
+              />
+            </View>
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
+              <Feather
+                name="user"
+                size={focused ? 24 : 22}
+                color={focused ? '#000' : '#8E8E93'}
+              />
+            </View>
+          ),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  iconWrapper: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+
+  iconWrapperActive: {
+    backgroundColor: Colors.accent, 
+    marginTop: -14,                 
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+});
