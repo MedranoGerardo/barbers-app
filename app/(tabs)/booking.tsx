@@ -136,8 +136,8 @@ const mockBarberAppointments = [
 ];
 
 // SIMULA EL ROL DEL USUARIO - CAMBIA ESTO SEGÚN TU LÓGICA
-/*const userRole: "client" | "barber" = "client"; // Cambia a 'barber' para probar*/
-const userRole: "client" | "barber" = "barber"; // Cambia a 'barber' para probar
+const userRole: "client" | "barber" = "client"; // Cambia a 'barber' para probar
+/*const userRole: "client" | "barber" = "barber"; // Cambia a 'barber' para probar*/
 
 export default function BookingScreen() {
   return (

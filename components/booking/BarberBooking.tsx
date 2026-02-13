@@ -1,10 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
+  Alert,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -25,12 +28,32 @@ interface Appointment {
 
 interface BarberBookingProps {
   appointments: Appointment[];
+  onCreateAppointment?: (appointment: Omit<Appointment, "id">) => void;
+  onRescheduleAppointment?: (
+    id: string,
+    newDate: string,
+    newTime: string,
+  ) => void;
+  onAcceptAppointment?: (id: string) => void;
+  onRejectAppointment?: (id: string) => void;
+  onCompleteAppointment?: (id: string) => void;
 }
 
-export default function BarberBooking({ appointments }: BarberBookingProps) {
+export default function BarberBooking({
+  appointments,
+  onCreateAppointment,
+  onRescheduleAppointment,
+  onAcceptAppointment,
+  onRejectAppointment,
+  onCompleteAppointment,
+}: BarberBookingProps) {
   const [activeTab, setActiveTab] = useState<"today" | "upcoming" | "history">(
     "today",
   );
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] =
+    useState<Appointment | null>(null);
 
   const today = new Date().toLocaleDateString("es-ES", {
     day: "2-digit",
@@ -54,6 +77,42 @@ export default function BarberBooking({ appointments }: BarberBookingProps) {
     (apt) => apt.status === "completed" || apt.status === "cancelled",
   );
 
+  const handleAccept = (id: string) => {
+    if (onAcceptAppointment) {
+      onAcceptAppointment(id);
+    }
+  };
+
+  const handleReject = (id: string) => {
+    Alert.alert(
+      "Rechazar Cita",
+      "¿Estás seguro de que deseas rechazar esta cita?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Rechazar",
+          style: "destructive",
+          onPress: () => onRejectAppointment && onRejectAppointment(id),
+        },
+      ],
+    );
+  };
+
+  const handleComplete = (id: string) => {
+    Alert.alert("Completar Cita", "¿Marcar esta cita como completada?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Completar",
+        onPress: () => onCompleteAppointment && onCompleteAppointment(id),
+      },
+    ]);
+  };
+
+  const handleReschedule = (appointment: Appointment) => {
+    setSelectedAppointment(appointment);
+    setShowRescheduleModal(true);
+  };
+
   return (
     <View style={styles.container}>
       {/* HEADER */}
@@ -64,9 +123,17 @@ export default function BarberBooking({ appointments }: BarberBookingProps) {
             {todayAppointments.length} citas hoy
           </Text>
         </View>
-        <TouchableOpacity style={styles.calendarBtn}>
-          <Ionicons name="calendar" size={24} color={Colors.accent} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => setShowCreateModal(true)}
+          >
+            <Ionicons name="add" size={24} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.calendarBtn}>
+            <Ionicons name="calendar" size={24} color={Colors.accent} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* RESUMEN DEL DÍA */}
@@ -186,6 +253,10 @@ export default function BarberBooking({ appointments }: BarberBookingProps) {
                 key={appointment.id}
                 appointment={appointment}
                 type="active"
+                onAccept={handleAccept}
+                onReject={handleReject}
+                onComplete={handleComplete}
+                onReschedule={handleReschedule}
               />
             ))
           ) : (
@@ -203,6 +274,10 @@ export default function BarberBooking({ appointments }: BarberBookingProps) {
                 key={appointment.id}
                 appointment={appointment}
                 type="active"
+                onAccept={handleAccept}
+                onReject={handleReject}
+                onComplete={handleComplete}
+                onReschedule={handleReschedule}
               />
             ))
           ) : (
@@ -230,12 +305,37 @@ export default function BarberBooking({ appointments }: BarberBookingProps) {
             />
           ))}
       </ScrollView>
+
+      {/* MODAL CREAR CITA */}
+      <CreateAppointmentModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={onCreateAppointment}
+      />
+
+      {/* MODAL REAGENDAR */}
+      <RescheduleModal
+        visible={showRescheduleModal}
+        appointment={selectedAppointment}
+        onClose={() => {
+          setShowRescheduleModal(false);
+          setSelectedAppointment(null);
+        }}
+        onSubmit={onRescheduleAppointment}
+      />
     </View>
   );
 }
 
-/* COMPONENTES */
-function AppointmentCard({ appointment, type }: any) {
+/* COMPONENTE CARD DE CITA */
+function AppointmentCard({
+  appointment,
+  type,
+  onAccept,
+  onReject,
+  onComplete,
+  onReschedule,
+}: any) {
   return (
     <View style={styles.appointmentCard}>
       <View style={styles.cardHeader}>
@@ -259,9 +359,19 @@ function AppointmentCard({ appointment, type }: any) {
             </View>
           </View>
         </View>
+
+        {/* Botón de reagendar para citas activas */}
+        {type === "active" && onReschedule && (
+          <TouchableOpacity
+            style={styles.rescheduleIconBtn}
+            onPress={() => onReschedule(appointment)}
+          >
+            <Ionicons name="calendar-outline" size={20} color={Colors.accent} />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* STATUS BADGE EN SU PROPIA FILA */}
+      {/* STATUS BADGE */}
       <View style={styles.statusRow}>
         {appointment.status === "pending" && (
           <View style={[styles.statusBadge, styles.pendingBadge]}>
@@ -312,11 +422,19 @@ function AppointmentCard({ appointment, type }: any) {
 
       {type === "active" && appointment.status === "pending" && (
         <View style={styles.cardActions}>
-          <TouchableOpacity style={styles.actionBtnReject} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.actionBtnReject}
+            activeOpacity={0.8}
+            onPress={() => onReject && onReject(appointment.id)}
+          >
             <Ionicons name="close" size={18} color="#FF3B30" />
             <Text style={styles.actionBtnRejectText}>Rechazar</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtnAccept} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.actionBtnAccept}
+            activeOpacity={0.8}
+            onPress={() => onAccept && onAccept(appointment.id)}
+          >
             <Ionicons name="checkmark" size={18} color={Colors.textPrimary} />
             <Text style={styles.actionBtnAcceptText}>Aceptar</Text>
           </TouchableOpacity>
@@ -336,7 +454,11 @@ function AppointmentCard({ appointment, type }: any) {
             />
             <Text style={styles.actionBtnSecondaryText}>Contactar</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtnPrimary} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.actionBtnPrimary}
+            activeOpacity={0.8}
+            onPress={() => onComplete && onComplete(appointment.id)}
+          >
             <Ionicons
               name="checkmark-circle"
               size={18}
@@ -347,6 +469,275 @@ function AppointmentCard({ appointment, type }: any) {
         </View>
       )}
     </View>
+  );
+}
+
+/* MODAL CREAR CITA */
+function CreateAppointmentModal({ visible, onClose, onSubmit }: any) {
+  const [formData, setFormData] = useState({
+    clientName: "",
+    clientPhone: "",
+    service: "",
+    date: "",
+    time: "",
+    price: "",
+  });
+
+  const handleSubmit = () => {
+    // Validación básica
+    if (
+      !formData.clientName ||
+      !formData.clientPhone ||
+      !formData.service ||
+      !formData.date ||
+      !formData.time ||
+      !formData.price
+    ) {
+      Alert.alert("Error", "Por favor completa todos los campos");
+      return;
+    }
+
+    const newAppointment = {
+      clientName: formData.clientName,
+      clientAvatar: `https://ui-avatars.com/api/?name=${formData.clientName}&background=D4AF37&color=1A1A1A`,
+      clientPhone: formData.clientPhone,
+      service: formData.service,
+      date: formData.date,
+      time: formData.time,
+      price: parseFloat(formData.price),
+      status: "confirmed" as const,
+      isNewClient: false,
+    };
+
+    if (onSubmit) {
+      onSubmit(newAppointment);
+    }
+
+    // Resetear formulario y cerrar
+    setFormData({
+      clientName: "",
+      clientPhone: "",
+      service: "",
+      date: "",
+      time: "",
+      price: "",
+    });
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Nueva Cita</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={28} color={Colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Nombre del Cliente</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ej: Juan Pérez"
+                placeholderTextColor={Colors.textSecondary}
+                value={formData.clientName}
+                onChangeText={(text) =>
+                  setFormData({ ...formData, clientName: text })
+                }
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Teléfono</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ej: +503 1234-5678"
+                placeholderTextColor={Colors.textSecondary}
+                keyboardType="phone-pad"
+                value={formData.clientPhone}
+                onChangeText={(text) =>
+                  setFormData({ ...formData, clientPhone: text })
+                }
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Servicio</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ej: Corte + Barba"
+                placeholderTextColor={Colors.textSecondary}
+                value={formData.service}
+                onChangeText={(text) =>
+                  setFormData({ ...formData, service: text })
+                }
+              />
+            </View>
+
+            <View style={styles.formRow}>
+              <View style={[styles.formGroup, { flex: 1 }]}>
+                <Text style={styles.label}>Fecha</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="DD/MM/AAAA"
+                  placeholderTextColor={Colors.textSecondary}
+                  value={formData.date}
+                  onChangeText={(text) =>
+                    setFormData({ ...formData, date: text })
+                  }
+                />
+              </View>
+
+              <View style={[styles.formGroup, { flex: 1, marginLeft: 10 }]}>
+                <Text style={styles.label}>Hora</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="HH:MM"
+                  placeholderTextColor={Colors.textSecondary}
+                  value={formData.time}
+                  onChangeText={(text) =>
+                    setFormData({ ...formData, time: text })
+                  }
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Precio ($)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ej: 15.00"
+                placeholderTextColor={Colors.textSecondary}
+                keyboardType="decimal-pad"
+                value={formData.price}
+                onChangeText={(text) =>
+                  setFormData({ ...formData, price: text })
+                }
+              />
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={styles.modalBtnCancel}
+              onPress={onClose}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalBtnCancelText}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalBtnSubmit}
+              onPress={handleSubmit}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalBtnSubmitText}>Crear Cita</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/* MODAL REAGENDAR */
+function RescheduleModal({ visible, appointment, onClose, onSubmit }: any) {
+  const [newDate, setNewDate] = useState("");
+  const [newTime, setNewTime] = useState("");
+
+  const handleSubmit = () => {
+    if (!newDate || !newTime) {
+      Alert.alert("Error", "Por favor ingresa fecha y hora");
+      return;
+    }
+
+    if (appointment && onSubmit) {
+      onSubmit(appointment.id, newDate, newTime);
+    }
+
+    setNewDate("");
+    setNewTime("");
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Reagendar Cita</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={28} color={Colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          {appointment && (
+            <View style={styles.rescheduleInfo}>
+              <Text style={styles.rescheduleClient}>
+                Cliente: {appointment.clientName}
+              </Text>
+              <Text style={styles.rescheduleService}>
+                Servicio: {appointment.service}
+              </Text>
+              <Text style={styles.rescheduleCurrent}>
+                Fecha actual: {appointment.date} - {appointment.time}
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Nueva Fecha</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="DD/MM/AAAA"
+              placeholderTextColor={Colors.textSecondary}
+              value={newDate}
+              onChangeText={setNewDate}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Nueva Hora</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="HH:MM"
+              placeholderTextColor={Colors.textSecondary}
+              value={newTime}
+              onChangeText={setNewTime}
+            />
+          </View>
+
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={styles.modalBtnCancel}
+              onPress={onClose}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalBtnCancelText}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalBtnSubmit}
+              onPress={handleSubmit}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalBtnSubmitText}>Reagendar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -385,6 +776,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  addBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: Colors.accent,
+    justifyContent: "center",
+    alignItems: "center",
   },
   calendarBtn: {
     width: 50,
@@ -519,6 +922,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     marginLeft: 4,
+  },
+  rescheduleIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(212, 175, 55, 0.3)",
   },
   statusRow: {
     flexDirection: "row",
@@ -680,5 +1093,101 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: "center",
     paddingHorizontal: 40,
+  },
+  // Estilos del Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: "90%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: Colors.textPrimary,
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  formRow: {
+    flexDirection: "row",
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.textPrimary,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: Colors.textPrimary,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 20,
+  },
+  modalBtnCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    alignItems: "center",
+  },
+  modalBtnCancelText: {
+    color: Colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalBtnSubmit: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.accent,
+    alignItems: "center",
+  },
+  modalBtnSubmitText: {
+    color: Colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  rescheduleInfo: {
+    backgroundColor: Colors.background,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  rescheduleClient: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: Colors.textPrimary,
+    marginBottom: 6,
+  },
+  rescheduleService: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 6,
+  },
+  rescheduleCurrent: {
+    fontSize: 14,
+    color: Colors.accent,
+    fontWeight: "600",
   },
 });
