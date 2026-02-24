@@ -1,127 +1,125 @@
-import { useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import Colors from '../../constants/colors';
-import { useRouter } from 'expo-router';
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Colors from "../../constants/colors";
+
+// 👇 CAMBIA ESTA IP POR LA IP DE TU PC EN LA RED LOCAL
+// En Windows: abre CMD y escribe "ipconfig", busca "IPv4 Address"
+const API_URL = "http://192.168.0.5:3000";
 
 export default function LoginScreen() {
   const router = useRouter();
-  
-  // Estados para los campos del formulario
-  const [correo, setCorreo] = useState('');
-  const [password, setPassword] = useState('');
-  
-  // Estados para UI
+
+  const [correo, setCorreo] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  
-  // Validar formato de correo
+
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   };
-  
-  // Manejar inicio de sesión
+
+  // ✅ LOGIN CONECTADO A LA API
   const handleLogin = async () => {
-    // Validaciones básicas
     if (!correo.trim()) {
-      Alert.alert('Error', 'Por favor ingresa tu correo electrónico');
+      Alert.alert("Error", "Por favor ingresa tu correo electrónico");
       return;
     }
-    
     if (!validateEmail(correo)) {
-      Alert.alert('Error', 'Por favor ingresa un correo electrónico válido');
+      Alert.alert("Error", "Por favor ingresa un correo electrónico válido");
       return;
     }
-    
     if (!password.trim()) {
-      Alert.alert('Error', 'Por favor ingresa tu contraseña');
+      Alert.alert("Error", "Por favor ingresa tu contraseña");
       return;
     }
-    
+
     setLoading(true);
-    
+
     try {
-      // Aquí iría tu llamada a la API para autenticar
-      // Por ahora simulamos un login exitoso
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Si "recordarme" está activado, guardarías las credenciales en AsyncStorage
+      const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ correo, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // El servidor respondió con error (401, 403, 500, etc.)
+        Alert.alert("Error", data.error || "Error al iniciar sesión");
+        return;
+      }
+
+      // Guardar token y datos del usuario en AsyncStorage
+      await AsyncStorage.setItem("token", data.token);
+      await AsyncStorage.setItem("user", JSON.stringify(data.user));
+
+      // Si "recordarme" está activo, guardar el correo
       if (rememberMe) {
-        // await AsyncStorage.setItem('rememberedEmail', correo);
-        console.log('Guardando correo para recordar');
+        await AsyncStorage.setItem("rememberedEmail", correo);
+      } else {
+        await AsyncStorage.removeItem("rememberedEmail");
       }
-      
-      // Navegar al home después del login exitoso
-      router.replace('/');
-      
-    } catch (error: any) {
-      // Manejar diferentes tipos de errores
-      let errorMessage = 'Error al iniciar sesión';
-      
-      if (error.response) {
-        // Errores del servidor
-        switch (error.response.status) {
-          case 401:
-            errorMessage = 'Correo o contraseña incorrectos';
-            break;
-          case 404:
-            errorMessage = 'Usuario no encontrado';
-            break;
-          case 500:
-            errorMessage = 'Error del servidor. Intenta más tarde';
-            break;
-        }
-      }
-      
-      Alert.alert('Error', errorMessage);
+
+      // Navegar al home
+      router.replace("/");
+    } catch (error) {
+      // Error de red (sin conexión, IP incorrecta, etc.)
+      Alert.alert(
+        "Error de conexión",
+        "No se pudo conectar con el servidor. Verifica tu conexión.",
+      );
     } finally {
       setLoading(false);
     }
   };
-  
-  // Función para "Olvidé mi contraseña"
+
   const handleForgotPassword = () => {
     Alert.alert(
-      'Recuperar Contraseña',
-      'Se enviará un enlace a tu correo para restablecer tu contraseña.',
+      "Recuperar Contraseña",
+      "Se enviará un enlace a tu correo para restablecer tu contraseña.",
       [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Enviar', 
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Enviar",
           onPress: () => {
-            // Aquí iría la lógica para recuperar contraseña
-            Alert.alert('Éxito', 'Se ha enviado un correo con las instrucciones');
-          }
-        }
-      ]
+            Alert.alert(
+              "Éxito",
+              "Se ha enviado un correo con las instrucciones",
+            );
+          },
+        },
+      ],
     );
   };
-  
+
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      <ScrollView 
+      <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Encabezado con flecha de regreso */}
         <View style={styles.header}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
           >
@@ -130,8 +128,7 @@ export default function LoginScreen() {
           <Text style={styles.headerTitle}>Iniciar Sesión</Text>
           <View style={{ width: 40 }} />
         </View>
-        
-        {/* Ilustración o logo */}
+
         <View style={styles.logoSection}>
           <View style={styles.logoContainer}>
             <Ionicons name="cut" size={50} color={Colors.accent} />
@@ -141,21 +138,21 @@ export default function LoginScreen() {
             Ingresa tus credenciales para acceder a tu cuenta
           </Text>
         </View>
-        
-        {/* Formulario */}
+
         <View style={styles.form}>
-          {/* Campo Correo */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Correo Electrónico</Text>
-            <View style={[
-              styles.inputContainer,
-              correo && !validateEmail(correo) && styles.inputError
-            ]}>
-              <Ionicons 
-                name="mail-outline" 
-                size={22} 
-                color={Colors.textSecondary} 
-                style={styles.inputIcon} 
+            <View
+              style={[
+                styles.inputContainer,
+                correo && !validateEmail(correo) && styles.inputError,
+              ]}
+            >
+              <Ionicons
+                name="mail-outline"
+                size={22}
+                color={Colors.textSecondary}
+                style={styles.inputIcon}
               />
               <TextInput
                 style={styles.input}
@@ -168,10 +165,14 @@ export default function LoginScreen() {
               />
               {correo && (
                 <TouchableOpacity
-                  onPress={() => setCorreo('')}
+                  onPress={() => setCorreo("")}
                   style={styles.clearButton}
                 >
-                  <Ionicons name="close-circle" size={18} color={Colors.textSecondary} />
+                  <Ionicons
+                    name="close-circle"
+                    size={18}
+                    color={Colors.textSecondary}
+                  />
                 </TouchableOpacity>
               )}
             </View>
@@ -179,16 +180,15 @@ export default function LoginScreen() {
               <Text style={styles.errorText}>Formato de correo inválido</Text>
             )}
           </View>
-          
-          {/* Campo Contraseña */}
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Contraseña</Text>
             <View style={styles.inputContainer}>
-              <Ionicons 
-                name="lock-closed-outline" 
-                size={22} 
-                color={Colors.textSecondary} 
-                style={styles.inputIcon} 
+              <Ionicons
+                name="lock-closed-outline"
+                size={22}
+                color={Colors.textSecondary}
+                style={styles.inputIcon}
               />
               <TextInput
                 style={styles.input}
@@ -203,15 +203,14 @@ export default function LoginScreen() {
                 style={styles.eyeButton}
               >
                 <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
                   size={22}
                   color={Colors.textSecondary}
                 />
               </TouchableOpacity>
             </View>
           </View>
-          
-          {/* Recordarme y Olvidé contraseña */}
+
           <View style={styles.optionsRow}>
             <TouchableOpacity
               style={styles.rememberMe}
@@ -220,25 +219,31 @@ export default function LoginScreen() {
             >
               <View style={styles.checkbox}>
                 {rememberMe && (
-                  <Ionicons name="checkmark" size={16} color={Colors.textPrimary} />
+                  <Ionicons
+                    name="checkmark"
+                    size={16}
+                    color={Colors.textPrimary}
+                  />
                 )}
               </View>
               <Text style={styles.rememberMeText}>Recordarme</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               onPress={handleForgotPassword}
               activeOpacity={0.7}
             >
-              <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
+              <Text style={styles.forgotPasswordText}>
+                ¿Olvidaste tu contraseña?
+              </Text>
             </TouchableOpacity>
           </View>
-          
-          {/* Botón de Iniciar Sesión */}
+
           <TouchableOpacity
             style={[
               styles.loginButton,
-              (!correo || !password || !validateEmail(correo)) && styles.loginButtonDisabled
+              (!correo || !password || !validateEmail(correo)) &&
+                styles.loginButtonDisabled,
             ]}
             onPress={handleLogin}
             disabled={loading || !correo || !password || !validateEmail(correo)}
@@ -249,36 +254,36 @@ export default function LoginScreen() {
             ) : (
               <>
                 <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
-                <Ionicons name="log-in-outline" size={20} color={Colors.textPrimary} />
+                <Ionicons
+                  name="log-in-outline"
+                  size={20}
+                  color={Colors.textPrimary}
+                />
               </>
             )}
           </TouchableOpacity>
-          
-          {/* Separador */}
+
           <View style={styles.separator}>
             <View style={styles.separatorLine} />
             <Text style={styles.separatorText}>O continúa con</Text>
             <View style={styles.separatorLine} />
           </View>
-          
-          {/* Botones de redes sociales */}
+
           <View style={styles.socialButtons}>
             <TouchableOpacity style={styles.socialButton}>
               <Ionicons name="logo-google" size={20} color="#DB4437" />
               <Text style={styles.socialButtonText}>Google</Text>
             </TouchableOpacity>
-            
             <TouchableOpacity style={styles.socialButton}>
               <Ionicons name="logo-facebook" size={20} color="#4267B2" />
               <Text style={styles.socialButtonText}>Facebook</Text>
             </TouchableOpacity>
           </View>
-          
-          {/* Enlace a Registro */}
+
           <View style={styles.registerLink}>
             <Text style={styles.registerText}>¿No tienes una cuenta? </Text>
             <TouchableOpacity
-              onPress={() => router.push('/(auth)/register')}
+              onPress={() => router.push("/(auth)/register")}
               activeOpacity={0.7}
             >
               <Text style={styles.registerLinkText}>Regístrate aquí</Text>
@@ -297,12 +302,12 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
-    minHeight: '100%',
+    minHeight: "100%",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 10,
@@ -311,19 +316,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   headerTitle: {
     color: Colors.textPrimary,
     fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: "bold",
+    textAlign: "center",
     flex: 1,
   },
   logoSection: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 30,
     paddingHorizontal: 20,
   },
@@ -331,22 +336,22 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 20,
   },
   welcomeText: {
     color: Colors.textPrimary,
     fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: "bold",
+    textAlign: "center",
     marginBottom: 8,
   },
   subtitleText: {
     color: Colors.textSecondary,
     fontSize: 15,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 22,
   },
   form: {
@@ -359,20 +364,20 @@ const styles = StyleSheet.create({
   label: {
     color: Colors.textPrimary,
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 8,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: Colors.card,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: "rgba(255,255,255,0.1)",
     paddingHorizontal: 5,
   },
   inputError: {
-    borderColor: '#ff4444',
+    borderColor: "#ff4444",
   },
   inputIcon: {
     marginLeft: 15,
@@ -391,20 +396,20 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   errorText: {
-    color: '#ff4444',
+    color: "#ff4444",
     fontSize: 12,
     marginTop: 5,
     marginLeft: 5,
   },
   optionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 25,
   },
   rememberMe: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   checkbox: {
     width: 22,
@@ -412,9 +417,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 2,
     borderColor: Colors.accent,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 10,
   },
   rememberMeText: {
@@ -424,13 +429,13 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     color: Colors.accent,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   loginButton: {
     backgroundColor: Colors.accent,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 18,
     borderRadius: 14,
     shadowColor: Colors.accent,
@@ -445,18 +450,18 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: Colors.textPrimary,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginRight: 10,
   },
   separator: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginVertical: 25,
   },
   separatorLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
   separatorText: {
     color: Colors.textSecondary,
@@ -464,31 +469,31 @@ const styles = StyleSheet.create({
     marginHorizontal: 15,
   },
   socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     gap: 15,
   },
   socialButton: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: Colors.card,
     padding: 15,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: "rgba(255,255,255,0.1)",
   },
   socialButtonText: {
     color: Colors.textPrimary,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     marginLeft: 10,
   },
   registerLink: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: 30,
     paddingVertical: 10,
   },
@@ -499,7 +504,7 @@ const styles = StyleSheet.create({
   registerLinkText: {
     color: Colors.accent,
     fontSize: 15,
-    fontWeight: 'bold',
-    textDecorationLine: 'underline',
+    fontWeight: "bold",
+    textDecorationLine: "underline",
   },
 });

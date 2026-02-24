@@ -1,30 +1,93 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-    Image,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Colors from "../../constants/colors";
 
-interface ClientProfileProps {
-  user: {
-    name: string;
-    email: string;
-    phone: string;
-    avatar: string;
-    memberSince: string;
-  };
-}
+const API_URL = "http://192.168.0.5:3000";
 
-export default function ClientProfile({ user }: ClientProfileProps) {
+export default function ClientProfile() {
   const router = useRouter();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // ✅ Cargar perfil desde la API
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        router.replace("/(auth)/login");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/usuarios/perfil`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        await AsyncStorage.clear();
+        router.replace("/(auth)/login");
+        return;
+      }
+
+      const data = await response.json();
+      setUser(data);
+    } catch (error) {
+      Alert.alert("Error", "No se pudo cargar el perfil");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Cerrar sesión con confirmación
+  const handleLogout = () => {
+    Alert.alert("Cerrar Sesión", "¿Estás seguro de que deseas cerrar sesión?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Cerrar Sesión",
+        style: "destructive",
+        onPress: async () => {
+          await AsyncStorage.removeItem("token");
+          await AsyncStorage.removeItem("user");
+          router.replace("/(auth)/login");
+        },
+      },
+    ]);
+  };
+
+  // Formatear fecha de registro
+  const formatMemberSince = (fecha: string) => {
+    if (!fecha) return "Recientemente";
+    const date = new Date(fecha);
+    return date.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.accent} />
+        <Text style={styles.loadingText}>Cargando perfil...</Text>
+      </View>
+    );
+  }
+
+  if (!user) return null;
 
   return (
     <ScrollView
@@ -39,15 +102,24 @@ export default function ClientProfile({ user }: ClientProfileProps) {
 
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrapper}>
-            <Image source={{ uri: user.avatar }} style={styles.avatar} />
+            <Image
+              source={{
+                uri:
+                  user.foto_perfil ||
+                  `https://ui-avatars.com/api/?name=${user.nombre}+${user.apellido}&background=D4AF37&color=1A1A1A&size=200`,
+              }}
+              style={styles.avatar}
+            />
             <TouchableOpacity style={styles.editAvatarBtn}>
               <Ionicons name="camera" size={20} color={Colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{user.name}</Text>
-            <Text style={styles.userEmail}>{user.email}</Text>
+            <Text style={styles.userName}>
+              {user.nombre} {user.apellido}
+            </Text>
+            <Text style={styles.userEmail}>{user.correo}</Text>
 
             <View style={styles.memberBadge}>
               <Ionicons
@@ -56,7 +128,7 @@ export default function ClientProfile({ user }: ClientProfileProps) {
                 color={Colors.textSecondary}
               />
               <Text style={styles.memberText}>
-                Miembro desde {user.memberSince}
+                Miembro desde {formatMemberSince(user.fecha_registro)}
               </Text>
             </View>
           </View>
@@ -110,7 +182,6 @@ export default function ClientProfile({ user }: ClientProfileProps) {
         />
       </MenuSection>
 
-      {/* CONFIGURACIÓN GENERAL */}
       <MenuSection title="Configuración">
         <MenuItem
           icon="notifications-outline"
@@ -145,7 +216,6 @@ export default function ClientProfile({ user }: ClientProfileProps) {
         />
       </MenuSection>
 
-      {/* INFORMACIÓN */}
       <MenuSection title="Información">
         <MenuItem
           icon="document-text-outline"
@@ -163,10 +233,7 @@ export default function ClientProfile({ user }: ClientProfileProps) {
       {/* CERRAR SESIÓN */}
       <TouchableOpacity
         style={styles.logoutBtn}
-        onPress={() => {
-          console.log("Cerrar sesión");
-          router.push("/(auth)/login");
-        }}
+        onPress={handleLogout}
         activeOpacity={0.9}
       >
         <Ionicons name="log-out-outline" size={24} color="#FF3B30" />
@@ -221,7 +288,6 @@ function MenuItem({
           )}
         </View>
       </View>
-
       {rightElement ||
         (onPress && (
           <Ionicons
@@ -234,15 +300,20 @@ function MenuItem({
   );
 }
 
-/* ESTILOS */
 const styles = StyleSheet.create({
-  scrollContent: {
-    paddingBottom: 20,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: Colors.background,
   },
-  header: {
-    position: "relative",
-    paddingBottom: 20,
+  loadingText: {
+    color: Colors.textSecondary,
+    marginTop: 10,
+    fontSize: 14,
   },
+  scrollContent: { paddingBottom: 20 },
+  header: { position: "relative", paddingBottom: 20 },
   headerBackground: {
     height: 150,
     backgroundColor: Colors.card,
@@ -258,10 +329,7 @@ const styles = StyleSheet.create({
     marginTop: -60,
     paddingHorizontal: 20,
   },
-  avatarWrapper: {
-    position: "relative",
-    marginBottom: 15,
-  },
+  avatarWrapper: { position: "relative", marginBottom: 15 },
   avatar: {
     width: 110,
     height: 110,
@@ -282,21 +350,14 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: Colors.background,
   },
-  userInfo: {
-    alignItems: "center",
-    marginBottom: 15,
-  },
+  userInfo: { alignItems: "center", marginBottom: 15 },
   userName: {
     fontSize: 24,
     fontWeight: "bold",
     color: Colors.textPrimary,
     marginBottom: 5,
   },
-  userEmail: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
+  userEmail: { fontSize: 15, color: Colors.textSecondary, marginBottom: 8 },
   memberBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -307,11 +368,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(212, 175, 55, 0.1)",
   },
-  memberText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginLeft: 6,
-  },
+  memberText: { fontSize: 13, color: Colors.textSecondary, marginLeft: 6 },
   editProfileBtn: {
     backgroundColor: Colors.accent,
     flexDirection: "row",
@@ -327,10 +384,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginLeft: 8,
   },
-  menuSection: {
-    paddingHorizontal: 20,
-    marginTop: 25,
-  },
+  menuSection: { paddingHorizontal: 20, marginTop: 25 },
   menuSectionTitle: {
     fontSize: 13,
     fontWeight: "600",
@@ -354,11 +408,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.03)",
   },
-  menuItemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
+  menuItemLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
   menuIconContainer: {
     width: 44,
     height: 44,
@@ -368,24 +418,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 15,
   },
-  menuItemContent: {
-    flex: 1,
-  },
-  menuItemTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  menuItemContent: { flex: 1 },
+  menuItemTitleRow: { flexDirection: "row", alignItems: "center" },
   menuItemTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: Colors.textPrimary,
     marginBottom: 2,
   },
-  menuItemDesc: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
+  menuItemDesc: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
   badge: {
     backgroundColor: Colors.accent,
     paddingHorizontal: 8,
@@ -393,11 +434,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginLeft: 8,
   },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "bold",
-    color: Colors.textPrimary,
-  },
+  badgeText: { fontSize: 11, fontWeight: "bold", color: Colors.textPrimary },
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
