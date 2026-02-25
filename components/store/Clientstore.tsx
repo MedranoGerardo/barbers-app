@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -33,7 +34,7 @@ interface CartItem {
 
 interface ClientStoreProps {
   products: Product[];
-  onPurchase?: (items: CartItem[]) => void;
+  onPurchase?: (items: CartItem[]) => Promise<void> | void;
 }
 
 export default function ClientStore({
@@ -46,6 +47,7 @@ export default function ClientStore({
   const [showCart, setShowCart] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [tempQuantity, setTempQuantity] = useState(1);
+  const [checkoutLoading, setCheckoutLoading] = useState(false); // ✅ Loading al comprar
 
   const categories = [
     { id: "all", label: "Todos", icon: "grid" },
@@ -74,7 +76,6 @@ export default function ClientStore({
 
   const addToCart = (product: Product, quantity: number = 1) => {
     const existingItem = cart.find((item) => item.product.id === product.id);
-
     if (existingItem) {
       if (existingItem.quantity + quantity > product.stock) {
         Alert.alert("Stock insuficiente", "No hay suficiente stock disponible");
@@ -94,7 +95,6 @@ export default function ClientStore({
       }
       setCart([...cart, { product, quantity }]);
     }
-
     Alert.alert("¡Agregado!", `${product.name} agregado al carrito`);
   };
 
@@ -108,7 +108,6 @@ export default function ClientStore({
       Alert.alert("Stock insuficiente", "No hay suficiente stock disponible");
       return;
     }
-
     if (newQuantity <= 0) {
       removeFromCart(productId);
     } else {
@@ -122,6 +121,7 @@ export default function ClientStore({
     }
   };
 
+  // ✅ Espera la respuesta de la API antes de mostrar éxito
   const handleCheckout = () => {
     if (cart.length === 0) {
       Alert.alert("Carrito vacío", "Agrega productos antes de comprar");
@@ -135,11 +135,24 @@ export default function ClientStore({
         { text: "Cancelar", style: "cancel" },
         {
           text: "Comprar",
-          onPress: () => {
-            onPurchase?.(cart);
-            setCart([]);
-            setShowCart(false);
-            Alert.alert("¡Compra exitosa!", "Tu pedido ha sido procesado");
+          onPress: async () => {
+            setCheckoutLoading(true);
+            try {
+              await onPurchase?.(cart);
+              setCart([]);
+              setShowCart(false);
+              Alert.alert(
+                "✅ ¡Compra exitosa!",
+                "Tu pedido ha sido procesado correctamente",
+              );
+            } catch (error) {
+              Alert.alert(
+                "Error",
+                "No se pudo procesar la compra. Intenta de nuevo.",
+              );
+            } finally {
+              setCheckoutLoading(false);
+            }
           },
         },
       ],
@@ -148,7 +161,7 @@ export default function ClientStore({
 
   return (
     <View style={styles.container}>
-      {/* Header con título y carrito */}
+      {/* HEADER */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Tienda</Text>
@@ -169,7 +182,7 @@ export default function ClientStore({
         </TouchableOpacity>
       </View>
 
-      {/* Banner promocional */}
+      {/* BANNER PROMOCIONAL */}
       <View style={styles.promoBanner}>
         <View style={styles.promoIcon}>
           <Ionicons name="gift" size={24} color={Colors.accent} />
@@ -180,7 +193,7 @@ export default function ClientStore({
         </View>
       </View>
 
-      {/* Barra de búsqueda */}
+      {/* BÚSQUEDA */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={Colors.textSecondary} />
         <TextInput
@@ -201,7 +214,7 @@ export default function ClientStore({
         )}
       </View>
 
-      {/* Categorías horizontales */}
+      {/* CATEGORÍAS */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -237,7 +250,7 @@ export default function ClientStore({
         ))}
       </ScrollView>
 
-      {/* Grid de productos */}
+      {/* GRID DE PRODUCTOS */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.productsGrid}
@@ -254,7 +267,6 @@ export default function ClientStore({
                   source={{ uri: product.image }}
                   style={styles.productImage}
                 />
-
                 {product.stock < 5 && (
                   <View style={styles.stockBadge}>
                     <Text style={styles.stockBadgeText}>
@@ -262,25 +274,36 @@ export default function ClientStore({
                     </Text>
                   </View>
                 )}
-
+                {product.stock === 0 && (
+                  <View
+                    style={[
+                      styles.stockBadge,
+                      { backgroundColor: "rgba(255,59,48,0.9)" },
+                    ]}
+                  >
+                    <Text style={styles.stockBadgeText}>Agotado</Text>
+                  </View>
+                )}
                 <View style={styles.productInfo}>
                   <Text style={styles.productName} numberOfLines={2}>
                     {product.name}
                   </Text>
-
                   <View style={styles.ratingContainer}>
                     <Ionicons name="star" size={14} color="#FFD700" />
                     <Text style={styles.ratingText}>
                       {product.rating.toFixed(1)} ({product.reviews})
                     </Text>
                   </View>
-
                   <View style={styles.priceRow}>
                     <Text style={styles.productPrice}>
                       ${product.price.toFixed(2)}
                     </Text>
                     <TouchableOpacity
-                      style={styles.addBtn}
+                      style={[
+                        styles.addBtn,
+                        product.stock === 0 && styles.addBtnDisabled,
+                      ]}
+                      disabled={product.stock === 0}
                       onPress={(e) => {
                         e.stopPropagation();
                         addToCart(product);
@@ -314,7 +337,7 @@ export default function ClientStore({
         )}
       </ScrollView>
 
-      {/* Modal detalle de producto */}
+      {/* MODAL DETALLE DE PRODUCTO */}
       <Modal
         visible={!!selectedProduct}
         animationType="slide"
@@ -333,16 +356,13 @@ export default function ClientStore({
               >
                 <Ionicons name="close" size={28} color={Colors.textPrimary} />
               </TouchableOpacity>
-
               <ScrollView>
                 <Image
                   source={{ uri: selectedProduct.image }}
                   style={styles.detailImage}
                 />
-
                 <View style={styles.detailInfo}>
                   <Text style={styles.detailName}>{selectedProduct.name}</Text>
-
                   <View style={styles.detailRating}>
                     <Ionicons name="star" size={18} color="#FFD700" />
                     <Text style={styles.detailRatingText}>
@@ -350,11 +370,9 @@ export default function ClientStore({
                       {selectedProduct.reviews} reseñas)
                     </Text>
                   </View>
-
                   <Text style={styles.detailDescription}>
                     {selectedProduct.description}
                   </Text>
-
                   <View style={styles.stockInfo}>
                     <Ionicons
                       name="cube-outline"
@@ -365,7 +383,6 @@ export default function ClientStore({
                       {selectedProduct.stock} unidades disponibles
                     </Text>
                   </View>
-
                   <View style={styles.quantitySelector}>
                     <Text style={styles.quantityLabel}>Cantidad:</Text>
                     <View style={styles.quantityControls}>
@@ -398,16 +415,18 @@ export default function ClientStore({
                       </TouchableOpacity>
                     </View>
                   </View>
-
                   <View style={styles.totalRow}>
                     <Text style={styles.totalLabel}>Total:</Text>
                     <Text style={styles.totalPrice}>
                       ${(selectedProduct.price * tempQuantity).toFixed(2)}
                     </Text>
                   </View>
-
                   <TouchableOpacity
-                    style={styles.addToCartBtn}
+                    style={[
+                      styles.addToCartBtn,
+                      selectedProduct.stock === 0 && styles.addBtnDisabled,
+                    ]}
+                    disabled={selectedProduct.stock === 0}
                     onPress={() => {
                       addToCart(selectedProduct, tempQuantity);
                       setSelectedProduct(null);
@@ -420,7 +439,9 @@ export default function ClientStore({
                       color={Colors.textPrimary}
                     />
                     <Text style={styles.addToCartBtnText}>
-                      Agregar al Carrito
+                      {selectedProduct.stock === 0
+                        ? "Sin stock"
+                        : "Agregar al Carrito"}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -430,7 +451,7 @@ export default function ClientStore({
         )}
       </Modal>
 
-      {/* Modal carrito */}
+      {/* MODAL CARRITO */}
       <Modal
         visible={showCart}
         animationType="slide"
@@ -476,7 +497,6 @@ export default function ClientStore({
                         <Text style={styles.cartItemPrice}>
                           ${item.product.price.toFixed(2)} c/u
                         </Text>
-
                         <View style={styles.cartItemControls}>
                           <View style={styles.cartQuantityControls}>
                             <TouchableOpacity
@@ -513,7 +533,6 @@ export default function ClientStore({
                               />
                             </TouchableOpacity>
                           </View>
-
                           <TouchableOpacity
                             onPress={() => removeFromCart(item.product.id)}
                           >
@@ -536,17 +555,29 @@ export default function ClientStore({
                       ${cartTotal.toFixed(2)}
                     </Text>
                   </View>
-
+                  {/* ✅ Muestra spinner mientras procesa la compra */}
                   <TouchableOpacity
-                    style={styles.checkoutBtn}
+                    style={[
+                      styles.checkoutBtn,
+                      checkoutLoading && { opacity: 0.7 },
+                    ]}
                     onPress={handleCheckout}
+                    disabled={checkoutLoading}
                   >
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={20}
-                      color={Colors.textPrimary}
-                    />
-                    <Text style={styles.checkoutBtnText}>Finalizar Compra</Text>
+                    {checkoutLoading ? (
+                      <ActivityIndicator color={Colors.textPrimary} />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color={Colors.textPrimary}
+                        />
+                        <Text style={styles.checkoutBtnText}>
+                          Finalizar Compra
+                        </Text>
+                      </>
+                    )}
                   </TouchableOpacity>
                 </View>
               </>
@@ -635,11 +666,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     marginLeft: 10,
   },
-  categoriesContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 15,
-    gap: 8,
-  },
+  categoriesContainer: { paddingHorizontal: 20, paddingBottom: 15, gap: 8 },
   categoryChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -649,26 +676,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 6,
   },
-  categoryChipActive: {
-    backgroundColor: Colors.accent,
-  },
+  categoryChipActive: { backgroundColor: Colors.accent },
   categoryChipText: {
     fontSize: 14,
     fontWeight: "600",
     color: Colors.textSecondary,
   },
-  categoryChipTextActive: {
-    color: Colors.textPrimary,
-  },
-  productsGrid: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  gridContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
+  categoryChipTextActive: { color: Colors.textPrimary },
+  productsGrid: { paddingHorizontal: 20, paddingBottom: 20 },
+  gridContainer: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   productCard: {
     width: "48%",
     backgroundColor: Colors.card,
@@ -694,9 +710,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.textPrimary,
   },
-  productInfo: {
-    padding: 12,
-  },
+  productInfo: { padding: 12 },
   productName: {
     fontSize: 14,
     fontWeight: "600",
@@ -710,20 +724,13 @@ const styles = StyleSheet.create({
     gap: 4,
     marginBottom: 8,
   },
-  ratingText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
+  ratingText: { fontSize: 12, color: Colors.textSecondary },
   priceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  productPrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: Colors.accent,
-  },
+  productPrice: { fontSize: 16, fontWeight: "bold", color: Colors.accent },
   addBtn: {
     width: 32,
     height: 32,
@@ -732,10 +739,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 60,
-  },
+  addBtnDisabled: { backgroundColor: "rgba(255,255,255,0.2)", opacity: 0.5 },
+  emptyState: { alignItems: "center", paddingVertical: 60 },
   emptyIconContainer: {
     width: 120,
     height: 120,
@@ -785,9 +790,7 @@ const styles = StyleSheet.create({
     height: 300,
     backgroundColor: "rgba(255,255,255,0.05)",
   },
-  detailInfo: {
-    padding: 20,
-  },
+  detailInfo: { padding: 20 },
   detailName: {
     fontSize: 24,
     fontWeight: "bold",
@@ -800,10 +803,7 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 15,
   },
-  detailRatingText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
+  detailRatingText: { fontSize: 14, color: Colors.textSecondary },
   detailDescription: {
     fontSize: 15,
     color: Colors.textSecondary,
@@ -816,26 +816,15 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 20,
   },
-  stockInfoText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
+  stockInfoText: { fontSize: 14, color: Colors.textSecondary },
   quantitySelector: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 20,
   },
-  quantityLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.textPrimary,
-  },
-  quantityControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 15,
-  },
+  quantityLabel: { fontSize: 16, fontWeight: "600", color: Colors.textPrimary },
+  quantityControls: { flexDirection: "row", alignItems: "center", gap: 15 },
   quantityBtn: {
     width: 40,
     height: 40,
@@ -860,16 +849,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.1)",
   },
-  totalLabel: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: Colors.textPrimary,
-  },
-  totalPrice: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: Colors.accent,
-  },
+  totalLabel: { fontSize: 18, fontWeight: "600", color: Colors.textPrimary },
+  totalPrice: { fontSize: 24, fontWeight: "bold", color: Colors.accent },
   addToCartBtn: {
     flexDirection: "row",
     backgroundColor: Colors.accent,
@@ -897,11 +878,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  cartTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: Colors.textPrimary,
-  },
+  cartTitle: { fontSize: 24, fontWeight: "bold", color: Colors.textPrimary },
   cartItem: {
     flexDirection: "row",
     backgroundColor: Colors.background,
@@ -915,31 +892,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.05)",
   },
-  cartItemInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
+  cartItemInfo: { flex: 1, marginLeft: 12 },
   cartItemName: {
     fontSize: 15,
     fontWeight: "600",
     color: Colors.textPrimary,
     marginBottom: 4,
   },
-  cartItemPrice: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
+  cartItemPrice: { fontSize: 13, color: Colors.textSecondary, marginBottom: 8 },
   cartItemControls: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  cartQuantityControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+  cartQuantityControls: { flexDirection: "row", alignItems: "center", gap: 10 },
   cartQuantityBtn: {
     width: 28,
     height: 28,
@@ -971,11 +937,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.textPrimary,
   },
-  cartTotalPrice: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: Colors.accent,
-  },
+  cartTotalPrice: { fontSize: 24, fontWeight: "bold", color: Colors.accent },
   checkoutBtn: {
     flexDirection: "row",
     backgroundColor: Colors.accent,

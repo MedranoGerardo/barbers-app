@@ -50,6 +50,18 @@ export default function BarberStore({
   );
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
+  // ✅ Estado local para precios (evita llamadas a la API por cada tecla)
+  const [localPrices, setLocalPrices] = useState<{ [id: string]: string }>({});
+
+  useEffect(() => {
+    // Sincronizar precios locales cuando cambian los productos
+    const prices: { [id: string]: string } = {};
+    products.forEach((p) => {
+      prices[p.id] = p.price.toString();
+    });
+    setLocalPrices(prices);
+  }, [products]);
+
   const categories = [
     { id: "all", label: "Todos", icon: "grid" },
     { id: "pomada", label: "Pomadas", icon: "sparkles" },
@@ -60,7 +72,6 @@ export default function BarberStore({
     { id: "otro", label: "Otros", icon: "ellipsis-horizontal" },
   ];
 
-  // Función para ordenar productos
   const getSortedProducts = () => {
     let filtered = products.filter((product) => {
       const matchesCategory =
@@ -106,17 +117,35 @@ export default function BarberStore({
     onEditProduct?.(productId, { stock: newStock });
   };
 
-  const handleQuickPriceUpdate = (productId: string, newPrice: number) => {
-    if (newPrice <= 0) {
+  // ✅ Solo guarda el precio cuando el usuario termina de escribir (onBlur)
+  const handlePriceBlur = (productId: string) => {
+    const newPrice = parseFloat(localPrices[productId]);
+    if (isNaN(newPrice) || newPrice <= 0) {
       Alert.alert("Error", "El precio debe ser mayor a 0");
+      // Restaurar precio original
+      const original = products.find((p) => p.id === productId);
+      if (original)
+        setLocalPrices((prev) => ({
+          ...prev,
+          [productId]: original.price.toString(),
+        }));
       return;
     }
     onEditProduct?.(productId, { price: newPrice });
   };
 
+  const handleSortPress = (field: typeof sortBy) => {
+    if (sortBy === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDirection(field === "sales" ? "desc" : "asc");
+    }
+  };
+
   return (
     <View style={styles.container}>
-      {/* Header con título y botón agregar */}
+      {/* HEADER */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Mi Tienda</Text>
@@ -135,76 +164,63 @@ export default function BarberStore({
         </TouchableOpacity>
       </View>
 
-      {/* Tarjetas de estadísticas mejoradas */}
+      {/* ESTADÍSTICAS */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.statsScroll}
       >
         <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <View
-              style={[
-                styles.statIconContainer,
-                { backgroundColor: "rgba(212, 175, 55, 0.15)" },
-              ]}
-            >
-              <Ionicons name="cube" size={20} color={Colors.accent} />
+          {[
+            {
+              icon: "cube",
+              color: Colors.accent,
+              bg: "rgba(212,175,55,0.15)",
+              value: totalInventory,
+              label: "En Stock",
+            },
+            {
+              icon: "trending-up",
+              color: "#34C759",
+              bg: "rgba(52,199,89,0.15)",
+              value: totalSales,
+              label: "Vendidos",
+            },
+            {
+              icon: "cash",
+              color: "#FF9500",
+              bg: "rgba(255,149,0,0.15)",
+              value: `$${totalRevenue.toFixed(0)}`,
+              label: "Ingresos",
+            },
+            {
+              icon: "pricetag",
+              color: "#007AFF",
+              bg: "rgba(0,122,255,0.15)",
+              value: `$${totalValue.toFixed(0)}`,
+              label: "Valor inventario",
+            },
+          ].map((stat, i) => (
+            <View key={i} style={styles.statCard}>
+              <View
+                style={[styles.statIconContainer, { backgroundColor: stat.bg }]}
+              >
+                <Ionicons
+                  name={stat.icon as any}
+                  size={20}
+                  color={stat.color}
+                />
+              </View>
+              <View style={styles.statInfo}>
+                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statLabel}>{stat.label}</Text>
+              </View>
             </View>
-            <View style={styles.statInfo}>
-              <Text style={styles.statValue}>{totalInventory}</Text>
-              <Text style={styles.statLabel}>En Stock</Text>
-            </View>
-          </View>
-
-          <View style={styles.statCard}>
-            <View
-              style={[
-                styles.statIconContainer,
-                { backgroundColor: "rgba(52, 199, 89, 0.15)" },
-              ]}
-            >
-              <Ionicons name="trending-up" size={20} color="#34C759" />
-            </View>
-            <View style={styles.statInfo}>
-              <Text style={styles.statValue}>{totalSales}</Text>
-              <Text style={styles.statLabel}>Vendidos</Text>
-            </View>
-          </View>
-
-          <View style={styles.statCard}>
-            <View
-              style={[
-                styles.statIconContainer,
-                { backgroundColor: "rgba(255, 149, 0, 0.15)" },
-              ]}
-            >
-              <Ionicons name="cash" size={20} color="#FF9500" />
-            </View>
-            <View style={styles.statInfo}>
-              <Text style={styles.statValue}>${totalRevenue.toFixed(0)}</Text>
-              <Text style={styles.statLabel}>Ingresos</Text>
-            </View>
-          </View>
-
-          <View style={styles.statCard}>
-            <View
-              style={[
-                styles.statIconContainer,
-                { backgroundColor: "rgba(0, 122, 255, 0.15)" },
-              ]}
-            >
-              <Ionicons name="pricetag" size={20} color="#007AFF" />
-            </View>
-            <View style={styles.statInfo}>
-              <Text style={styles.statValue}>${totalValue.toFixed(0)}</Text>
-              <Text style={styles.statLabel}>Valor inventario</Text>
-            </View>
-          </View>
+          ))}
         </View>
       </ScrollView>
 
-      {/* Barra de búsqueda y filtros */}
+      {/* BÚSQUEDA */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={Colors.textSecondary} />
         <TextInput
@@ -225,115 +241,43 @@ export default function BarberStore({
         )}
       </View>
 
-      {/* Filtros de ordenamiento */}
+      {/* ORDENAR */}
       <View style={styles.sortContainer}>
         <Text style={styles.sortLabel}>Ordenar por:</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.sortButtons}>
-            <TouchableOpacity
-              style={[
-                styles.sortButton,
-                sortBy === "name" && styles.sortButtonActive,
-              ]}
-              onPress={() => {
-                if (sortBy === "name") {
-                  setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-                } else {
-                  setSortBy("name");
-                  setSortDirection("asc");
-                }
-              }}
-            >
-              <Text
+            {(["name", "price", "stock", "sales"] as const).map((field) => (
+              <TouchableOpacity
+                key={field}
                 style={[
-                  styles.sortButtonText,
-                  sortBy === "name" && styles.sortButtonTextActive,
+                  styles.sortButton,
+                  sortBy === field && styles.sortButtonActive,
                 ]}
+                onPress={() => handleSortPress(field)}
               >
-                Nombre{" "}
-                {sortBy === "name" && (sortDirection === "asc" ? "↑" : "↓")}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.sortButton,
-                sortBy === "price" && styles.sortButtonActive,
-              ]}
-              onPress={() => {
-                if (sortBy === "price") {
-                  setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-                } else {
-                  setSortBy("price");
-                  setSortDirection("asc");
-                }
-              }}
-            >
-              <Text
-                style={[
-                  styles.sortButtonText,
-                  sortBy === "price" && styles.sortButtonTextActive,
-                ]}
-              >
-                Precio{" "}
-                {sortBy === "price" && (sortDirection === "asc" ? "↑" : "↓")}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.sortButton,
-                sortBy === "stock" && styles.sortButtonActive,
-              ]}
-              onPress={() => {
-                if (sortBy === "stock") {
-                  setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-                } else {
-                  setSortBy("stock");
-                  setSortDirection("asc");
-                }
-              }}
-            >
-              <Text
-                style={[
-                  styles.sortButtonText,
-                  sortBy === "stock" && styles.sortButtonTextActive,
-                ]}
-              >
-                Stock{" "}
-                {sortBy === "stock" && (sortDirection === "asc" ? "↑" : "↓")}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.sortButton,
-                sortBy === "sales" && styles.sortButtonActive,
-              ]}
-              onPress={() => {
-                if (sortBy === "sales") {
-                  setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-                } else {
-                  setSortBy("sales");
-                  setSortDirection("desc"); // Por defecto, más vendidos primero
-                }
-              }}
-            >
-              <Text
-                style={[
-                  styles.sortButtonText,
-                  sortBy === "sales" && styles.sortButtonTextActive,
-                ]}
-              >
-                Ventas{" "}
-                {sortBy === "sales" && (sortDirection === "asc" ? "↑" : "↓")}
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.sortButtonText,
+                    sortBy === field && styles.sortButtonTextActive,
+                  ]}
+                >
+                  {
+                    {
+                      name: "Nombre",
+                      price: "Precio",
+                      stock: "Stock",
+                      sales: "Ventas",
+                    }[field]
+                  }
+                  {sortBy === field && (sortDirection === "asc" ? " ↑" : " ↓")}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </ScrollView>
       </View>
 
-      {/* Categorías horizontales */}
+      {/* CATEGORÍAS */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -378,7 +322,7 @@ export default function BarberStore({
         ))}
       </ScrollView>
 
-      {/* Lista de productos con acciones rápidas */}
+      {/* LISTA DE PRODUCTOS */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.productsList}
@@ -390,7 +334,6 @@ export default function BarberStore({
                 source={{ uri: product.image }}
                 style={styles.productImage}
               />
-
               <View style={styles.productInfo}>
                 <View style={styles.productHeader}>
                   <Text style={styles.productName}>{product.name}</Text>
@@ -415,22 +358,27 @@ export default function BarberStore({
                 </Text>
 
                 <View style={styles.productStats}>
+                  {/* PRECIO - ✅ guarda solo al perder foco */}
                   <View style={styles.statRow}>
                     <Ionicons name="pricetag" size={14} color={Colors.accent} />
                     <Text style={styles.statLabel}>Precio:</Text>
                     <TextInput
                       style={styles.priceInput}
-                      value={product.price.toString()}
+                      value={
+                        localPrices[product.id] ?? product.price.toString()
+                      }
                       keyboardType="decimal-pad"
-                      onChangeText={(text) => {
-                        const newPrice = parseFloat(text);
-                        if (!isNaN(newPrice)) {
-                          handleQuickPriceUpdate(product.id, newPrice);
-                        }
-                      }}
+                      onChangeText={(text) =>
+                        setLocalPrices((prev) => ({
+                          ...prev,
+                          [product.id]: text,
+                        }))
+                      }
+                      onBlur={() => handlePriceBlur(product.id)}
                     />
                   </View>
 
+                  {/* STOCK */}
                   <View style={styles.statRow}>
                     <Ionicons name="cube" size={14} color="#34C759" />
                     <Text style={styles.statLabel}>Stock:</Text>
@@ -493,10 +441,9 @@ export default function BarberStore({
                     />
                     <Text style={styles.actionBtnEditText}>Editar todo</Text>
                   </TouchableOpacity>
-
                   <TouchableOpacity
                     style={styles.actionBtnDelete}
-                    onPress={() => {
+                    onPress={() =>
                       Alert.alert(
                         "Eliminar Producto",
                         `¿Estás seguro de eliminar "${product.name}"?`,
@@ -508,8 +455,8 @@ export default function BarberStore({
                             onPress: () => onDeleteProduct?.(product.id),
                           },
                         ],
-                      );
-                    }}
+                      )
+                    }
                   >
                     <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                     <Text style={styles.actionBtnDeleteText}>Eliminar</Text>
@@ -549,7 +496,7 @@ export default function BarberStore({
         )}
       </ScrollView>
 
-      {/* MODAL COMPLETO para agregar/editar producto */}
+      {/* MODAL AGREGAR/EDITAR */}
       <Modal
         visible={showAddModal}
         animationType="slide"
@@ -571,7 +518,6 @@ export default function BarberStore({
                 <Ionicons name="close" size={28} color={Colors.textPrimary} />
               </TouchableOpacity>
             </View>
-
             <ProductForm
               product={selectedProduct}
               onSubmit={(productData) => {
@@ -595,14 +541,13 @@ export default function BarberStore({
   );
 }
 
-// Componente de formulario completo para productos
 function ProductForm({
   product,
   onSubmit,
   onCancel,
 }: {
   product: Product | null;
-  onSubmit: (productData: any) => void;
+  onSubmit: (data: any) => void;
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
@@ -636,82 +581,73 @@ function ProductForm({
     }
   }, [product]);
 
-  const categories: Product["category"][] = [
-    "pomada",
-    "cera",
-    "gel",
-    "aceite",
-    "shampoo",
-    "otro",
-  ];
-
   const handleSubmit = () => {
-    // Validaciones
     if (!formData.name.trim()) {
       Alert.alert("Error", "El nombre del producto es obligatorio");
       return;
     }
-
     const price = parseFloat(formData.price);
     if (isNaN(price) || price <= 0) {
       Alert.alert("Error", "Ingresa un precio válido mayor a 0");
       return;
     }
-
     const stock = parseInt(formData.stock);
     if (isNaN(stock) || stock < 0) {
       Alert.alert("Error", "Ingresa un stock válido (0 o más)");
       return;
     }
 
-    const productData = {
+    onSubmit({
       name: formData.name.trim(),
       description: formData.description.trim(),
-      price: price,
+      price,
       category: formData.category,
-      stock: stock,
+      stock,
       image:
         formData.image.trim() ||
-        `https://ui-avatars.com/api/?name=${formData.name}&background=D4AF37&color=1A1A1A&size=200`,
-    };
-
-    onSubmit(productData);
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=D4AF37&color=1A1A1A&size=200`,
+    });
   };
 
   return (
     <ScrollView showsVerticalScrollIndicator={false}>
       <View style={styles.formGroup}>
         <Text style={styles.label}>
-          Nombre del producto <Text style={styles.required}>*</Text>
+          Nombre <Text style={styles.required}>*</Text>
         </Text>
         <TextInput
           style={styles.input}
           placeholder="Ej: Pomada Ultra Hold"
           placeholderTextColor={Colors.textSecondary}
           value={formData.name}
-          onChangeText={(text) => setFormData({ ...formData, name: text })}
+          onChangeText={(t) => setFormData({ ...formData, name: t })}
         />
       </View>
-
       <View style={styles.formGroup}>
         <Text style={styles.label}>Descripción</Text>
         <TextInput
           style={[styles.input, styles.textArea]}
-          placeholder="Describe las características del producto..."
+          placeholder="Describe el producto..."
           placeholderTextColor={Colors.textSecondary}
           multiline
           numberOfLines={3}
           value={formData.description}
-          onChangeText={(text) =>
-            setFormData({ ...formData, description: text })
-          }
+          onChangeText={(t) => setFormData({ ...formData, description: t })}
         />
       </View>
-
       <View style={styles.formGroup}>
         <Text style={styles.label}>Categoría</Text>
         <View style={styles.categoryGrid}>
-          {categories.map((cat) => (
+          {(
+            [
+              "pomada",
+              "cera",
+              "gel",
+              "aceite",
+              "shampoo",
+              "otro",
+            ] as Product["category"][]
+          ).map((cat) => (
             <TouchableOpacity
               key={cat}
               style={[
@@ -732,7 +668,6 @@ function ProductForm({
           ))}
         </View>
       </View>
-
       <View style={styles.formRow}>
         <View style={[styles.formGroup, { flex: 1 }]}>
           <Text style={styles.label}>
@@ -744,10 +679,9 @@ function ProductForm({
             placeholderTextColor={Colors.textSecondary}
             keyboardType="decimal-pad"
             value={formData.price}
-            onChangeText={(text) => setFormData({ ...formData, price: text })}
+            onChangeText={(t) => setFormData({ ...formData, price: t })}
           />
         </View>
-
         <View style={[styles.formGroup, { flex: 1, marginLeft: 10 }]}>
           <Text style={styles.label}>
             Stock <Text style={styles.required}>*</Text>
@@ -758,11 +692,10 @@ function ProductForm({
             placeholderTextColor={Colors.textSecondary}
             keyboardType="number-pad"
             value={formData.stock}
-            onChangeText={(text) => setFormData({ ...formData, stock: text })}
+            onChangeText={(t) => setFormData({ ...formData, stock: t })}
           />
         </View>
       </View>
-
       <View style={styles.formGroup}>
         <Text style={styles.label}>URL de imagen (opcional)</Text>
         <TextInput
@@ -770,13 +703,12 @@ function ProductForm({
           placeholder="https://ejemplo.com/imagen.jpg"
           placeholderTextColor={Colors.textSecondary}
           value={formData.image}
-          onChangeText={(text) => setFormData({ ...formData, image: text })}
+          onChangeText={(t) => setFormData({ ...formData, image: t })}
         />
         <Text style={styles.hint}>
           Si no se proporciona, se generará una imagen automática
         </Text>
       </View>
-
       <View style={styles.modalActions}>
         <TouchableOpacity style={styles.modalBtnCancel} onPress={onCancel}>
           <Text style={styles.modalBtnCancelText}>Cancelar</Text>
@@ -811,15 +743,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  statsScroll: {
-    maxHeight: 100,
-    marginBottom: 15,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    gap: 10,
-  },
+  statsScroll: { maxHeight: 100, marginBottom: 15 },
+  statsContainer: { flexDirection: "row", paddingHorizontal: 20, gap: 10 },
   statCard: {
     flexDirection: "row",
     backgroundColor: Colors.card,
@@ -855,40 +780,19 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     marginLeft: 10,
   },
-  sortContainer: {
-    marginHorizontal: 20,
-    marginBottom: 10,
-  },
-  sortLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginBottom: 5,
-  },
-  sortButtons: {
-    flexDirection: "row",
-    gap: 8,
-  },
+  sortContainer: { marginHorizontal: 20, marginBottom: 10 },
+  sortLabel: { fontSize: 12, color: Colors.textSecondary, marginBottom: 5 },
+  sortButtons: { flexDirection: "row", gap: 8 },
   sortButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: Colors.card,
   },
-  sortButtonActive: {
-    backgroundColor: Colors.accent,
-  },
-  sortButtonText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  sortButtonTextActive: {
-    color: Colors.textPrimary,
-  },
-  categoriesContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 15,
-    gap: 8,
-  },
+  sortButtonActive: { backgroundColor: Colors.accent },
+  sortButtonText: { fontSize: 12, color: Colors.textSecondary },
+  sortButtonTextActive: { color: Colors.textPrimary },
+  categoriesContainer: { paddingHorizontal: 20, paddingBottom: 15, gap: 8 },
   categoryChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -898,21 +802,14 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 6,
   },
-  categoryChipActive: {
-    backgroundColor: Colors.accent,
-  },
+  categoryChipActive: { backgroundColor: Colors.accent },
   categoryChipText: {
     fontSize: 14,
     fontWeight: "600",
     color: Colors.textSecondary,
   },
-  categoryChipTextActive: {
-    color: Colors.textPrimary,
-  },
-  productsList: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
+  categoryChipTextActive: { color: Colors.textPrimary },
+  productsList: { paddingHorizontal: 20, paddingBottom: 20 },
   productCard: {
     flexDirection: "row",
     backgroundColor: Colors.card,
@@ -926,23 +823,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.05)",
   },
-  productInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  productHeader: {
-    marginBottom: 4,
-  },
-  productName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: Colors.textPrimary,
-  },
-  productBadges: {
-    flexDirection: "row",
-    marginTop: 4,
-    gap: 4,
-  },
+  productInfo: { flex: 1, marginLeft: 12 },
+  productHeader: { marginBottom: 4 },
+  productName: { fontSize: 16, fontWeight: "bold", color: Colors.textPrimary },
+  productBadges: { flexDirection: "row", marginTop: 4, gap: 4 },
   lowStockBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -951,13 +835,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 8,
     gap: 3,
-    alignSelf: "flex-start",
   },
-  lowStockText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#FF9500",
-  },
+  lowStockText: { fontSize: 10, fontWeight: "600", color: "#FF9500" },
   bestSellerBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -966,21 +845,14 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 8,
     gap: 3,
-    alignSelf: "flex-start",
   },
-  bestSellerText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: Colors.accent,
-  },
+  bestSellerText: { fontSize: 10, fontWeight: "600", color: Colors.accent },
   productDescription: {
     fontSize: 12,
     color: Colors.textSecondary,
     marginBottom: 8,
   },
-  productStats: {
-    marginBottom: 10,
-  },
+  productStats: { marginBottom: 10 },
   statRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -994,11 +866,7 @@ const styles = StyleSheet.create({
     padding: 0,
     minWidth: 60,
   },
-  stockControl: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
+  stockControl: { flexDirection: "row", alignItems: "center", gap: 8 },
   stockBtn: {
     width: 24,
     height: 24,
@@ -1014,20 +882,9 @@ const styles = StyleSheet.create({
     minWidth: 25,
     textAlign: "center",
   },
-  salesValue: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#34C759",
-  },
-  ratingValue: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  productActions: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-  },
+  salesValue: { fontSize: 14, fontWeight: "600", color: "#34C759" },
+  ratingValue: { fontSize: 12, color: Colors.textSecondary },
+  productActions: { flexDirection: "row", gap: 8, marginTop: 8 },
   actionBtnEdit: {
     flex: 1,
     flexDirection: "row",
@@ -1040,11 +897,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(212,175,55,0.3)",
     gap: 4,
   },
-  actionBtnEditText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.accent,
-  },
+  actionBtnEditText: { fontSize: 13, fontWeight: "600", color: Colors.accent },
   actionBtnDelete: {
     flex: 1,
     flexDirection: "row",
@@ -1057,15 +910,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,59,48,0.3)",
     gap: 4,
   },
-  actionBtnDeleteText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#FF3B30",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 60,
-  },
+  actionBtnDeleteText: { fontSize: 13, fontWeight: "600", color: "#FF3B30" },
+  emptyState: { alignItems: "center", paddingVertical: 60 },
   emptyIconContainer: {
     width: 120,
     height: 120,
@@ -1120,31 +966,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: Colors.textPrimary,
-  },
-  formGroup: {
-    marginBottom: 16,
-  },
-  formRow: {
-    flexDirection: "row",
-  },
+  modalTitle: { fontSize: 24, fontWeight: "bold", color: Colors.textPrimary },
+  formGroup: { marginBottom: 16 },
+  formRow: { flexDirection: "row" },
   label: {
     fontSize: 14,
     fontWeight: "600",
     color: Colors.textPrimary,
     marginBottom: 8,
   },
-  required: {
-    color: "#FF3B30",
-  },
-  hint: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
+  required: { color: "#FF3B30" },
+  hint: { fontSize: 11, color: Colors.textSecondary, marginTop: 4 },
   input: {
     backgroundColor: Colors.background,
     borderRadius: 12,
@@ -1154,15 +986,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: "top",
-  },
-  categoryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
+  textArea: { minHeight: 80, textAlignVertical: "top" },
+  categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   categoryOption: {
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -1180,9 +1005,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.textSecondary,
   },
-  categoryOptionTextActive: {
-    color: Colors.textPrimary,
-  },
+  categoryOptionTextActive: { color: Colors.textPrimary },
   modalActions: {
     flexDirection: "row",
     gap: 12,
