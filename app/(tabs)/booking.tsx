@@ -5,8 +5,7 @@ import { ActivityIndicator, View } from "react-native";
 import BarberBooking from "../../components/booking/BarberBooking";
 import ClientBooking from "../../components/booking/ClientBooking";
 import Colors from "../../constants/colors";
-
-const API_URL = "http://192.168.0.3:3000";
+import { API_URL } from "../../constants/config";
 
 export default function BookingScreen() {
   const router = useRouter();

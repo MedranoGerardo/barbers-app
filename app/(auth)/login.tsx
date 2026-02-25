@@ -15,10 +15,7 @@ import {
   View,
 } from "react-native";
 import Colors from "../../constants/colors";
-
-// 👇 CAMBIA ESTA IP POR LA IP DE TU PC EN LA RED LOCAL
-// En Windows: abre CMD y escribe "ipconfig", busca "IPv4 Address"
-const API_URL = "http://192.168.0.3:3000";
+import { API_URL } from "../../constants/config";
 
 export default function LoginScreen() {
   const router = useRouter();

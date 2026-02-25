@@ -15,8 +15,7 @@ import {
   View,
 } from "react-native";
 import Colors from "../../constants/colors";
-
-const API_URL = "http://192.168.0.3:3000";
+import { API_URL } from "../../constants/config";
 
 const getPasswordStrength = (password: string) => {
   if (password.length === 0)
