@@ -1,151 +1,136 @@
-import { View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 import BarberBooking from "../../components/booking/BarberBooking";
 import ClientBooking from "../../components/booking/ClientBooking";
 import Colors from "../../constants/colors";
 
-// DATOS MOCK - REEMPLAZAR CON TU API/CONTEXTO
-const mockClientAppointments = [
-  {
-    id: "1",
-    barberName: "Juan Pérez",
-    barberAvatar:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400",
-    barbershop: "BarberShop Elite",
-    service: "Corte Clásico + Barba",
-    date: "15 feb, 2024",
-    time: "10:00 AM",
-    price: 15,
-    status: "upcoming" as const,
-  },
-  {
-    id: "2",
-    barberName: "Miguel Torres",
-    barberAvatar:
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400",
-    barbershop: "Style Masters",
-    service: "Fade Moderno",
-    date: "20 feb, 2024",
-    time: "3:00 PM",
-    price: 12,
-    status: "upcoming" as const,
-  },
-  {
-    id: "3",
-    barberName: "Carlos Méndez",
-    barberAvatar:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400",
-    barbershop: "Premium Cuts",
-    service: "Corte + Diseño",
-    date: "10 feb, 2024",
-    time: "2:00 PM",
-    price: 18,
-    status: "completed" as const,
-  },
-  {
-    id: "4",
-    barberName: "Luis García",
-    barberAvatar:
-      "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400",
-    barbershop: "Urban Barbers",
-    service: "Corte Simple",
-    date: "5 feb, 2024",
-    time: "11:00 AM",
-    price: 10,
-    status: "cancelled" as const,
-  },
-];
-
-const mockBarberAppointments = [
-  {
-    id: "1",
-    clientName: "Roberto Martínez",
-    clientAvatar:
-      "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400",
-    clientPhone: "+503 7777-1111",
-    service: "Corte Fade + Barba",
-    date: new Date().toLocaleDateString("es-ES", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }),
-    time: "9:00 AM",
-    price: 15,
-    status: "confirmed" as const,
-    isNewClient: false,
-  },
-  {
-    id: "2",
-    clientName: "Andrés López",
-    clientAvatar:
-      "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=400",
-    clientPhone: "+503 7777-2222",
-    service: "Corte Clásico",
-    date: new Date().toLocaleDateString("es-ES", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }),
-    time: "11:00 AM",
-    price: 12,
-    status: "pending" as const,
-    isNewClient: true,
-  },
-  {
-    id: "3",
-    clientName: "Fernando Ramírez",
-    clientAvatar:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400",
-    clientPhone: "+503 7777-3333",
-    service: "Corte + Diseño",
-    date: new Date().toLocaleDateString("es-ES", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }),
-    time: "2:00 PM",
-    price: 18,
-    status: "confirmed" as const,
-    isNewClient: false,
-  },
-  {
-    id: "4",
-    clientName: "Diego Hernández",
-    clientAvatar:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400",
-    clientPhone: "+503 7777-4444",
-    service: "Arreglo de Barba",
-    date: "15 feb, 2024",
-    time: "10:00 AM",
-    price: 8,
-    status: "confirmed" as const,
-    isNewClient: false,
-  },
-  {
-    id: "5",
-    clientName: "Carlos Gómez",
-    clientAvatar:
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400",
-    clientPhone: "+503 7777-5555",
-    service: "Corte Ejecutivo",
-    date: "10 feb, 2024",
-    time: "4:00 PM",
-    price: 20,
-    status: "completed" as const,
-    isNewClient: false,
-  },
-];
-
-// SIMULA EL ROL DEL USUARIO - CAMBIA ESTO SEGÚN TU LÓGICA
-const userRole: "client" | "barber" = "client"; // Cambia a 'barber' para probar
-/*const userRole: "client" | "barber" = "barber"; // Cambia a 'barber' para probar*/
+const API_URL = "http://192.168.0.3:3000";
 
 export default function BookingScreen() {
+  const router = useRouter();
+  const [rol, setRol] = useState<string | null>(null);
+  const [citas, setCitas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const userStr = await AsyncStorage.getItem("user");
+      const token = await AsyncStorage.getItem("token");
+
+      if (!userStr || !token) {
+        router.replace("/(auth)/login");
+        return;
+      }
+
+      const user = JSON.parse(userStr);
+      setRol(user.rol);
+
+      // ✅ Cargar citas reales desde la API
+      const response = await fetch(`${API_URL}/api/citas`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        router.replace("/(auth)/login");
+        return;
+      }
+
+      const data = await response.json();
+      setCitas(data);
+    } catch (error) {
+      console.error("Error cargando citas:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Formatear citas para ClientBooking
+  const formatClientAppointments = () => {
+    return citas.map((c) => ({
+      id: String(c.id),
+      barberName: `${c.barbero_nombre} ${c.barbero_apellido}`,
+      barberAvatar:
+        c.barbero_avatar ||
+        `https://ui-avatars.com/api/?name=${c.barbero_nombre}&background=D4AF37&color=1A1A1A`,
+      barbershop: c.nombre_barberia || "Barbería",
+      service: c.servicio_nombre,
+      date: new Date(c.fecha).toLocaleDateString("es-ES", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      time: c.hora.slice(0, 5),
+      price: Number(c.precio),
+      status: mapStatus(c.status),
+    }));
+  };
+
+  // Formatear citas para BarberBooking
+  const formatBarberAppointments = () => {
+    return citas.map((c) => ({
+      id: String(c.id),
+      clientName: `${c.cliente_nombre} ${c.cliente_apellido}`,
+      clientAvatar:
+        c.cliente_avatar ||
+        `https://ui-avatars.com/api/?name=${c.cliente_nombre}&background=D4AF37&color=1A1A1A`,
+      clientPhone: c.cliente_telefono || "Sin teléfono",
+      service: c.servicio_nombre,
+      date: new Date(c.fecha).toLocaleDateString("es-ES", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      time: c.hora.slice(0, 5),
+      price: Number(c.precio),
+      status: mapStatus(c.status),
+      isNewClient: Boolean(c.es_cliente_nuevo),
+    }));
+  };
+
+  // Mapear status de la BD al formato del componente
+  const mapStatus = (status: string) => {
+    const map: any = {
+      pending: "pending",
+      confirmed: "upcoming",
+      completed: "completed",
+      cancelled: "cancelled",
+    };
+    return map[status] || "pending";
+  };
+
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: Colors.background,
+        }}
+      >
+        <ActivityIndicator size="large" color={Colors.accent} />
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
-      {userRole === "client" ? (
-        <ClientBooking appointments={mockClientAppointments} />
+      {rol === "cliente" ? (
+        <ClientBooking
+          appointments={formatClientAppointments()}
+          onRefresh={loadData}
+        />
       ) : (
-        <BarberBooking appointments={mockBarberAppointments} />
+        <BarberBooking
+          appointments={formatBarberAppointments()}
+          onRefresh={loadData}
+        />
       )}
     </View>
   );

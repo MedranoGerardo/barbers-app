@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useState } from "react";
 import {
   Alert,
@@ -12,6 +13,8 @@ import {
   View,
 } from "react-native";
 import Colors from "../../constants/colors";
+
+const API_URL = "http://192.168.0.3:3000";
 
 interface Appointment {
   id: string;
@@ -28,24 +31,12 @@ interface Appointment {
 
 interface BarberBookingProps {
   appointments: Appointment[];
-  onCreateAppointment?: (appointment: Omit<Appointment, "id">) => void;
-  onRescheduleAppointment?: (
-    id: string,
-    newDate: string,
-    newTime: string,
-  ) => void;
-  onAcceptAppointment?: (id: string) => void;
-  onRejectAppointment?: (id: string) => void;
-  onCompleteAppointment?: (id: string) => void;
+  onRefresh?: () => void;
 }
 
 export default function BarberBooking({
   appointments,
-  onCreateAppointment,
-  onRescheduleAppointment,
-  onAcceptAppointment,
-  onRejectAppointment,
-  onCompleteAppointment,
+  onRefresh,
 }: BarberBookingProps) {
   const [activeTab, setActiveTab] = useState<"today" | "upcoming" | "history">(
     "today",
@@ -66,23 +57,42 @@ export default function BarberBooking({
       apt.date === today &&
       (apt.status === "pending" || apt.status === "confirmed"),
   );
-
   const upcomingAppointments = appointments.filter(
     (apt) =>
       apt.date !== today &&
       (apt.status === "pending" || apt.status === "confirmed"),
   );
-
   const historyAppointments = appointments.filter(
     (apt) => apt.status === "completed" || apt.status === "cancelled",
   );
 
-  const handleAccept = (id: string) => {
-    if (onAcceptAppointment) {
-      onAcceptAppointment(id);
+  // ✅ Obtener token
+  const getToken = async () => {
+    return await AsyncStorage.getItem("token");
+  };
+
+  // ✅ Aceptar cita → status: confirmed
+  const handleAccept = async (id: string) => {
+    try {
+      const token = await getToken();
+      const response = await fetch(`${API_URL}/api/citas/${id}/status`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: "confirmed" }),
+      });
+      if (response.ok) {
+        Alert.alert("✅ Cita aceptada");
+        onRefresh && onRefresh();
+      }
+    } catch {
+      Alert.alert("Error", "No se pudo aceptar la cita");
     }
   };
 
+  // ✅ Rechazar cita → status: cancelled
   const handleReject = (id: string) => {
     Alert.alert(
       "Rechazar Cita",
@@ -92,25 +102,90 @@ export default function BarberBooking({
         {
           text: "Rechazar",
           style: "destructive",
-          onPress: () => onRejectAppointment && onRejectAppointment(id),
+          onPress: async () => {
+            try {
+              const token = await getToken();
+              const response = await fetch(
+                `${API_URL}/api/citas/${id}/status`,
+                {
+                  method: "PUT",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({ status: "cancelled" }),
+                },
+              );
+              if (response.ok) {
+                Alert.alert("Cita rechazada");
+                onRefresh && onRefresh();
+              }
+            } catch {
+              Alert.alert("Error", "No se pudo rechazar la cita");
+            }
+          },
         },
       ],
     );
   };
 
+  // ✅ Completar cita → status: completed
   const handleComplete = (id: string) => {
     Alert.alert("Completar Cita", "¿Marcar esta cita como completada?", [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Completar",
-        onPress: () => onCompleteAppointment && onCompleteAppointment(id),
+        onPress: async () => {
+          try {
+            const token = await getToken();
+            const response = await fetch(`${API_URL}/api/citas/${id}/status`, {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ status: "completed" }),
+            });
+            if (response.ok) {
+              Alert.alert("✅ Cita completada");
+              onRefresh && onRefresh();
+            }
+          } catch {
+            Alert.alert("Error", "No se pudo completar la cita");
+          }
+        },
       },
     ]);
   };
 
+  // ✅ Reagendar cita
   const handleReschedule = (appointment: Appointment) => {
     setSelectedAppointment(appointment);
     setShowRescheduleModal(true);
+  };
+
+  const submitReschedule = async (
+    id: string,
+    newDate: string,
+    newTime: string,
+  ) => {
+    try {
+      const token = await getToken();
+      const response = await fetch(`${API_URL}/api/citas/${id}/reagendar`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ fecha: newDate, hora: newTime }),
+      });
+      if (response.ok) {
+        Alert.alert("✅ Cita reagendada");
+        onRefresh && onRefresh();
+      }
+    } catch {
+      Alert.alert("Error", "No se pudo reagendar la cita");
+    }
   };
 
   return (
@@ -152,9 +227,7 @@ export default function BarberBooking({
             <Text style={styles.summaryLabel}>Hoy</Text>
           </View>
         </View>
-
         <View style={styles.summaryDivider} />
-
         <View style={styles.summaryItem}>
           <View
             style={[
@@ -171,9 +244,7 @@ export default function BarberBooking({
             <Text style={styles.summaryLabel}>Próximas</Text>
           </View>
         </View>
-
         <View style={styles.summaryDivider} />
-
         <View style={styles.summaryItem}>
           <View
             style={[
@@ -197,48 +268,27 @@ export default function BarberBooking({
 
       {/* TABS */}
       <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "today" && styles.activeTab]}
-          onPress={() => setActiveTab("today")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "today" && styles.activeTabText,
-            ]}
+        {(["today", "upcoming", "history"] as const).map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tab, activeTab === tab && styles.activeTab]}
+            onPress={() => setActiveTab(tab)}
+            activeOpacity={0.8}
           >
-            Hoy
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "upcoming" && styles.activeTab]}
-          onPress={() => setActiveTab("upcoming")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "upcoming" && styles.activeTabText,
-            ]}
-          >
-            Próximas
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "history" && styles.activeTab]}
-          onPress={() => setActiveTab("history")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "history" && styles.activeTabText,
-            ]}
-          >
-            Historial
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === tab && styles.activeTabText,
+              ]}
+            >
+              {tab === "today"
+                ? "Hoy"
+                : tab === "upcoming"
+                  ? "Próximas"
+                  : "Historial"}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* CONTENIDO */}
@@ -248,10 +298,10 @@ export default function BarberBooking({
       >
         {activeTab === "today" &&
           (todayAppointments.length > 0 ? (
-            todayAppointments.map((appointment) => (
+            todayAppointments.map((apt) => (
               <AppointmentCard
-                key={appointment.id}
-                appointment={appointment}
+                key={apt.id}
+                appointment={apt}
                 type="active"
                 onAccept={handleAccept}
                 onReject={handleReject}
@@ -266,13 +316,12 @@ export default function BarberBooking({
               description="Disfruta tu día libre o configura tu disponibilidad"
             />
           ))}
-
         {activeTab === "upcoming" &&
           (upcomingAppointments.length > 0 ? (
-            upcomingAppointments.map((appointment) => (
+            upcomingAppointments.map((apt) => (
               <AppointmentCard
-                key={appointment.id}
-                appointment={appointment}
+                key={apt.id}
+                appointment={apt}
                 type="active"
                 onAccept={handleAccept}
                 onReject={handleReject}
@@ -287,15 +336,10 @@ export default function BarberBooking({
               description="Las nuevas reservas aparecerán aquí"
             />
           ))}
-
         {activeTab === "history" &&
           (historyAppointments.length > 0 ? (
-            historyAppointments.map((appointment) => (
-              <AppointmentCard
-                key={appointment.id}
-                appointment={appointment}
-                type="history"
-              />
+            historyAppointments.map((apt) => (
+              <AppointmentCard key={apt.id} appointment={apt} type="history" />
             ))
           ) : (
             <EmptyState
@@ -306,14 +350,12 @@ export default function BarberBooking({
           ))}
       </ScrollView>
 
-      {/* MODAL CREAR CITA */}
+      {/* MODALES */}
       <CreateAppointmentModal
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onSubmit={onCreateAppointment}
+        onRefresh={onRefresh}
       />
-
-      {/* MODAL REAGENDAR */}
       <RescheduleModal
         visible={showRescheduleModal}
         appointment={selectedAppointment}
@@ -321,13 +363,13 @@ export default function BarberBooking({
           setShowRescheduleModal(false);
           setSelectedAppointment(null);
         }}
-        onSubmit={onRescheduleAppointment}
+        onSubmit={submitReschedule}
       />
     </View>
   );
 }
 
-/* COMPONENTE CARD DE CITA */
+/* CARD DE CITA */
 function AppointmentCard({
   appointment,
   type,
@@ -359,8 +401,6 @@ function AppointmentCard({
             </View>
           </View>
         </View>
-
-        {/* Botón de reagendar para citas activas */}
         {type === "active" && onReschedule && (
           <TouchableOpacity
             style={styles.rescheduleIconBtn}
@@ -371,7 +411,6 @@ function AppointmentCard({
         )}
       </View>
 
-      {/* STATUS BADGE */}
       <View style={styles.statusRow}>
         {appointment.status === "pending" && (
           <View style={[styles.statusBadge, styles.pendingBadge]}>
@@ -402,51 +441,40 @@ function AppointmentCard({
       <View style={styles.cardDivider} />
 
       <View style={styles.cardDetails}>
-        <View style={styles.detailRow}>
-          <Ionicons name="cut-outline" size={18} color={Colors.accent} />
-          <Text style={styles.detailText}>{appointment.service}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Ionicons name="calendar-outline" size={18} color={Colors.accent} />
-          <Text style={styles.detailText}>{appointment.date}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Ionicons name="time-outline" size={18} color={Colors.accent} />
-          <Text style={styles.detailText}>{appointment.time}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Ionicons name="cash-outline" size={18} color={Colors.accent} />
-          <Text style={styles.detailText}>${appointment.price}</Text>
-        </View>
+        {[
+          { icon: "cut-outline", text: appointment.service },
+          { icon: "calendar-outline", text: appointment.date },
+          { icon: "time-outline", text: appointment.time },
+          { icon: "cash-outline", text: `$${appointment.price}` },
+        ].map((item, i) => (
+          <View key={i} style={styles.detailRow}>
+            <Ionicons name={item.icon as any} size={18} color={Colors.accent} />
+            <Text style={styles.detailText}>{item.text}</Text>
+          </View>
+        ))}
       </View>
 
       {type === "active" && appointment.status === "pending" && (
         <View style={styles.cardActions}>
           <TouchableOpacity
             style={styles.actionBtnReject}
-            activeOpacity={0.8}
-            onPress={() => onReject && onReject(appointment.id)}
+            onPress={() => onReject(appointment.id)}
           >
             <Ionicons name="close" size={18} color="#FF3B30" />
             <Text style={styles.actionBtnRejectText}>Rechazar</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionBtnAccept}
-            activeOpacity={0.8}
-            onPress={() => onAccept && onAccept(appointment.id)}
+            onPress={() => onAccept(appointment.id)}
           >
             <Ionicons name="checkmark" size={18} color={Colors.textPrimary} />
             <Text style={styles.actionBtnAcceptText}>Aceptar</Text>
           </TouchableOpacity>
         </View>
       )}
-
       {type === "active" && appointment.status === "confirmed" && (
         <View style={styles.cardActions}>
-          <TouchableOpacity
-            style={styles.actionBtnSecondary}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={styles.actionBtnSecondary}>
             <Ionicons
               name="chatbubble-outline"
               size={18}
@@ -456,8 +484,7 @@ function AppointmentCard({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionBtnPrimary}
-            activeOpacity={0.8}
-            onPress={() => onComplete && onComplete(appointment.id)}
+            onPress={() => onComplete(appointment.id)}
           >
             <Ionicons
               name="checkmark-circle"
@@ -473,7 +500,7 @@ function AppointmentCard({
 }
 
 /* MODAL CREAR CITA */
-function CreateAppointmentModal({ visible, onClose, onSubmit }: any) {
+function CreateAppointmentModal({ visible, onClose, onRefresh }: any) {
   const [formData, setFormData] = useState({
     clientName: "",
     clientPhone: "",
@@ -483,11 +510,9 @@ function CreateAppointmentModal({ visible, onClose, onSubmit }: any) {
     price: "",
   });
 
-  const handleSubmit = () => {
-    // Validación básica
+  const handleSubmit = async () => {
     if (
       !formData.clientName ||
-      !formData.clientPhone ||
       !formData.service ||
       !formData.date ||
       !formData.time ||
@@ -497,31 +522,12 @@ function CreateAppointmentModal({ visible, onClose, onSubmit }: any) {
       return;
     }
 
-    const newAppointment = {
-      clientName: formData.clientName,
-      clientAvatar: `https://ui-avatars.com/api/?name=${formData.clientName}&background=D4AF37&color=1A1A1A`,
-      clientPhone: formData.clientPhone,
-      service: formData.service,
-      date: formData.date,
-      time: formData.time,
-      price: parseFloat(formData.price),
-      status: "confirmed" as const,
-      isNewClient: false,
-    };
-
-    if (onSubmit) {
-      onSubmit(newAppointment);
-    }
-
-    // Resetear formulario y cerrar
-    setFormData({
-      clientName: "",
-      clientPhone: "",
-      service: "",
-      date: "",
-      time: "",
-      price: "",
-    });
+    // Por ahora solo cierra el modal — crear cita manual requiere buscar cliente por nombre
+    // Se puede mejorar en una próxima iteración
+    Alert.alert(
+      "Info",
+      "Para crear citas, el cliente debe reservar desde su app",
+    );
     onClose();
   };
 
@@ -529,7 +535,7 @@ function CreateAppointmentModal({ visible, onClose, onSubmit }: any) {
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={true}
+      transparent
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
@@ -540,54 +546,51 @@ function CreateAppointmentModal({ visible, onClose, onSubmit }: any) {
               <Ionicons name="close" size={28} color={Colors.textPrimary} />
             </TouchableOpacity>
           </View>
-
           <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Nombre del Cliente</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: Juan Pérez"
-                placeholderTextColor={Colors.textSecondary}
-                value={formData.clientName}
-                onChangeText={(text) =>
-                  setFormData({ ...formData, clientName: text })
-                }
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Teléfono</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: +503 1234-5678"
-                placeholderTextColor={Colors.textSecondary}
-                keyboardType="phone-pad"
-                value={formData.clientPhone}
-                onChangeText={(text) =>
-                  setFormData({ ...formData, clientPhone: text })
-                }
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Servicio</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: Corte + Barba"
-                placeholderTextColor={Colors.textSecondary}
-                value={formData.service}
-                onChangeText={(text) =>
-                  setFormData({ ...formData, service: text })
-                }
-              />
-            </View>
-
+            {[
+              {
+                label: "Nombre del Cliente",
+                key: "clientName",
+                placeholder: "Ej: Juan Pérez",
+              },
+              {
+                label: "Teléfono",
+                key: "clientPhone",
+                placeholder: "+503 1234-5678",
+                keyboard: "phone-pad",
+              },
+              {
+                label: "Servicio",
+                key: "service",
+                placeholder: "Ej: Corte + Barba",
+              },
+              {
+                label: "Precio ($)",
+                key: "price",
+                placeholder: "15.00",
+                keyboard: "decimal-pad",
+              },
+            ].map((field) => (
+              <View key={field.key} style={styles.formGroup}>
+                <Text style={styles.label}>{field.label}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder={field.placeholder}
+                  placeholderTextColor={Colors.textSecondary}
+                  keyboardType={(field.keyboard as any) || "default"}
+                  value={(formData as any)[field.key]}
+                  onChangeText={(text) =>
+                    setFormData({ ...formData, [field.key]: text })
+                  }
+                />
+              </View>
+            ))}
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
                 <Text style={styles.label}>Fecha</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="DD/MM/AAAA"
+                  placeholder="AAAA-MM-DD"
                   placeholderTextColor={Colors.textSecondary}
                   value={formData.date}
                   onChangeText={(text) =>
@@ -595,7 +598,6 @@ function CreateAppointmentModal({ visible, onClose, onSubmit }: any) {
                   }
                 />
               </View>
-
               <View style={[styles.formGroup, { flex: 1, marginLeft: 10 }]}>
                 <Text style={styles.label}>Hora</Text>
                 <TextInput
@@ -609,34 +611,14 @@ function CreateAppointmentModal({ visible, onClose, onSubmit }: any) {
                 />
               </View>
             </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Precio ($)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: 15.00"
-                placeholderTextColor={Colors.textSecondary}
-                keyboardType="decimal-pad"
-                value={formData.price}
-                onChangeText={(text) =>
-                  setFormData({ ...formData, price: text })
-                }
-              />
-            </View>
           </ScrollView>
-
           <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={styles.modalBtnCancel}
-              onPress={onClose}
-              activeOpacity={0.8}
-            >
+            <TouchableOpacity style={styles.modalBtnCancel} onPress={onClose}>
               <Text style={styles.modalBtnCancelText}>Cancelar</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.modalBtnSubmit}
               onPress={handleSubmit}
-              activeOpacity={0.8}
             >
               <Text style={styles.modalBtnSubmitText}>Crear Cita</Text>
             </TouchableOpacity>
@@ -657,11 +639,9 @@ function RescheduleModal({ visible, appointment, onClose, onSubmit }: any) {
       Alert.alert("Error", "Por favor ingresa fecha y hora");
       return;
     }
-
     if (appointment && onSubmit) {
       onSubmit(appointment.id, newDate, newTime);
     }
-
     setNewDate("");
     setNewTime("");
     onClose();
@@ -671,7 +651,7 @@ function RescheduleModal({ visible, appointment, onClose, onSubmit }: any) {
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={true}
+      transparent
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
@@ -682,7 +662,6 @@ function RescheduleModal({ visible, appointment, onClose, onSubmit }: any) {
               <Ionicons name="close" size={28} color={Colors.textPrimary} />
             </TouchableOpacity>
           </View>
-
           {appointment && (
             <View style={styles.rescheduleInfo}>
               <Text style={styles.rescheduleClient}>
@@ -696,41 +675,33 @@ function RescheduleModal({ visible, appointment, onClose, onSubmit }: any) {
               </Text>
             </View>
           )}
-
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Nueva Fecha</Text>
+            <Text style={styles.label}>Nueva Fecha (AAAA-MM-DD)</Text>
             <TextInput
               style={styles.input}
-              placeholder="DD/MM/AAAA"
+              placeholder="2024-03-15"
               placeholderTextColor={Colors.textSecondary}
               value={newDate}
               onChangeText={setNewDate}
             />
           </View>
-
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Nueva Hora</Text>
+            <Text style={styles.label}>Nueva Hora (HH:MM)</Text>
             <TextInput
               style={styles.input}
-              placeholder="HH:MM"
+              placeholder="14:00"
               placeholderTextColor={Colors.textSecondary}
               value={newTime}
               onChangeText={setNewTime}
             />
           </View>
-
           <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={styles.modalBtnCancel}
-              onPress={onClose}
-              activeOpacity={0.8}
-            >
+            <TouchableOpacity style={styles.modalBtnCancel} onPress={onClose}>
               <Text style={styles.modalBtnCancelText}>Cancelar</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.modalBtnSubmit}
               onPress={handleSubmit}
-              activeOpacity={0.8}
             >
               <Text style={styles.modalBtnSubmitText}>Reagendar</Text>
             </TouchableOpacity>
@@ -753,12 +724,8 @@ function EmptyState({ icon, title, description }: any) {
   );
 }
 
-/* ESTILOS */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -767,20 +734,9 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 15,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: Colors.textPrimary,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  headerTitle: { fontSize: 28, fontWeight: "bold", color: Colors.textPrimary },
+  headerSubtitle: { fontSize: 14, color: Colors.textSecondary, marginTop: 2 },
+  headerActions: { flexDirection: "row", gap: 10 },
   addBtn: {
     width: 50,
     height: 50,
@@ -809,12 +765,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.05)",
   },
-  summaryItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+  summaryItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
   summaryIconContainer: {
     width: 40,
     height: 40,
@@ -822,15 +773,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: Colors.textPrimary,
-  },
-  summaryLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
+  summaryValue: { fontSize: 20, fontWeight: "bold", color: Colors.textPrimary },
+  summaryLabel: { fontSize: 12, color: Colors.textSecondary },
   summaryDivider: {
     width: 1,
     backgroundColor: "rgba(255, 255, 255, 0.05)",
@@ -848,21 +792,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
   },
-  activeTab: {
-    borderBottomColor: Colors.accent,
-  },
-  tabText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Colors.textSecondary,
-  },
-  activeTabText: {
-    color: Colors.accent,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
+  activeTab: { borderBottomColor: Colors.accent },
+  tabText: { fontSize: 15, fontWeight: "600", color: Colors.textSecondary },
+  activeTabText: { color: Colors.accent },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
   appointmentCard: {
     backgroundColor: Colors.card,
     borderRadius: 16,
@@ -877,10 +810,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 4,
   },
-  clientInfo: {
-    flexDirection: "row",
-    flex: 1,
-  },
+  clientInfo: { flexDirection: "row", flex: 1 },
   clientAvatar: {
     width: 50,
     height: 50,
@@ -888,10 +818,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.accent,
   },
-  clientDetails: {
-    marginLeft: 12,
-    flex: 1,
-  },
+  clientDetails: { marginLeft: 12, flex: 1 },
   clientNameRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -909,20 +836,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
   },
-  newClientText: {
-    color: "#34C759",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  phoneRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  clientPhone: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginLeft: 4,
-  },
+  newClientText: { color: "#34C759", fontSize: 10, fontWeight: "600" },
+  phoneRow: { flexDirection: "row", alignItems: "center" },
+  clientPhone: { fontSize: 14, color: Colors.textSecondary, marginLeft: 4 },
   rescheduleIconBtn: {
     width: 36,
     height: 36,
@@ -933,11 +849,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(212, 175, 55, 0.3)",
   },
-  statusRow: {
-    flexDirection: "row",
-    marginTop: 10,
-    marginBottom: 2,
-  },
+  statusRow: { flexDirection: "row", marginTop: 10, marginBottom: 2 },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -945,36 +857,28 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 12,
   },
-  pendingBadge: {
-    backgroundColor: "rgba(255, 149, 0, 0.15)",
-  },
+  pendingBadge: { backgroundColor: "rgba(255, 149, 0, 0.15)" },
   pendingText: {
     color: "#FF9500",
     fontSize: 12,
     fontWeight: "600",
     marginLeft: 4,
   },
-  confirmedBadge: {
-    backgroundColor: "rgba(212, 175, 55, 0.15)",
-  },
+  confirmedBadge: { backgroundColor: "rgba(212, 175, 55, 0.15)" },
   confirmedText: {
     color: Colors.accent,
     fontSize: 12,
     fontWeight: "600",
     marginLeft: 4,
   },
-  completedBadge: {
-    backgroundColor: "rgba(52, 199, 89, 0.15)",
-  },
+  completedBadge: { backgroundColor: "rgba(52, 199, 89, 0.15)" },
   completedText: {
     color: "#34C759",
     fontSize: 12,
     fontWeight: "600",
     marginLeft: 4,
   },
-  cancelledBadge: {
-    backgroundColor: "rgba(255, 59, 48, 0.15)",
-  },
+  cancelledBadge: { backgroundColor: "rgba(255, 59, 48, 0.15)" },
   cancelledText: {
     color: "#FF3B30",
     fontSize: 12,
@@ -986,23 +890,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.05)",
     marginVertical: 14,
   },
-  cardDetails: {
-    gap: 10,
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  detailText: {
-    fontSize: 15,
-    color: Colors.textPrimary,
-    marginLeft: 12,
-  },
-  cardActions: {
-    flexDirection: "row",
-    marginTop: 15,
-    gap: 10,
-  },
+  cardDetails: { gap: 10 },
+  detailRow: { flexDirection: "row", alignItems: "center" },
+  detailText: { fontSize: 15, color: Colors.textPrimary, marginLeft: 12 },
+  cardActions: { flexDirection: "row", marginTop: 15, gap: 10 },
   actionBtnReject: {
     flex: 1,
     flexDirection: "row",
@@ -1067,10 +958,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 6,
   },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 60,
-  },
+  emptyState: { alignItems: "center", paddingVertical: 60 },
   emptyIconContainer: {
     width: 120,
     height: 120,
@@ -1094,7 +982,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 40,
   },
-  // Estilos del Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
@@ -1113,17 +1000,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: Colors.textPrimary,
-  },
-  formGroup: {
-    marginBottom: 16,
-  },
-  formRow: {
-    flexDirection: "row",
-  },
+  modalTitle: { fontSize: 24, fontWeight: "bold", color: Colors.textPrimary },
+  formGroup: { marginBottom: 16 },
+  formRow: { flexDirection: "row" },
   label: {
     fontSize: 14,
     fontWeight: "600",
@@ -1139,11 +1018,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
-  modalActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 20,
-  },
+  modalActions: { flexDirection: "row", gap: 12, marginTop: 20 },
   modalBtnCancel: {
     flex: 1,
     paddingVertical: 14,
@@ -1185,9 +1060,5 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: 6,
   },
-  rescheduleCurrent: {
-    fontSize: 14,
-    color: Colors.accent,
-    fontWeight: "600",
-  },
+  rescheduleCurrent: { fontSize: 14, color: Colors.accent, fontWeight: "600" },
 });
