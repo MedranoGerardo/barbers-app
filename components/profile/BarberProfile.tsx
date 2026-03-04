@@ -181,13 +181,13 @@ export default function BarberProfile() {
           icon="cut-outline"
           title="Mis Servicios"
           description="Catálogo y precios"
-          onPress={() => console.log("Servicios")}
+          onPress={() => router.push("/barber/BarberServices")}
         />
         <MenuItem
           icon="time-outline"
           title="Horario de Atención"
           description="Configura tu disponibilidad"
-          onPress={() => console.log("Horario")}
+          onPress={() => router.push("/barber/BarberOpeningHours")}
         />
       </MenuSection>
 
